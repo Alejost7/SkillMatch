@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+
+# Configuración local y secretos
+.env
+.env.*
+!.env.example
+
+# Registros de ejecución
+*.log
+
+# Resultados de pruebas y compilación
+coverage/
+dist/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
