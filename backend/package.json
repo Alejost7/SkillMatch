@@ -1,0 +1,24 @@
+{
+  "name": "skillmatch-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API del backend de SkillMatch",
+  "main": "src/server.js",
+  "type": "module",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "echo \"Pruebas pendientes de implementar\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Diego Alejandro Santander Toro",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "mysql2": "^3.24.6"
+  }
+}
