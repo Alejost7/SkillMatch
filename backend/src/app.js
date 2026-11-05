@@ -2,6 +2,7 @@ import express from 'express';
 import { notFound } from './middlewares/notFound.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import categoriasRoutes from './modules/categorias/categorias.routes.js';
+import habilidadesRoutes from './modules/habilidades/habilidades.routes.js';
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.get('/api/health', (req, res) => {
 // Aquí se registran las rutas de los módulos. Las rutas deben estar antes de notFound y errorHandler para que puedan ser manejadas correctamente.
 
 app.use('/api/categorias', categoriasRoutes);
+app.use('/api/habilidades', habilidadesRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

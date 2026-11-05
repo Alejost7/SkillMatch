@@ -2,7 +2,7 @@
 
 SkillMatch es una plataforma web orientada al intercambio no monetario de conocimientos y habilidades. Permite que las personas publiquen habilidades que pueden enseñar, registren habilidades que desean aprender, busquen coincidencias, envíen solicitudes de conexión, se comuniquen y califiquen las experiencias de intercambio.
 
-Actualmente, el proyecto implementa el módulo de gestión de categorías, que permite listar, crear, actualizar y eliminar categorías de conocimiento desde el frontend, mediante una API conectada a una base de datos MariaDB.
+Actualmente, el proyecto implementa los módulos de gestión de categorías y gestión de habilidades en el backend. Ambos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento y las habilidades asociadas a cada categoría.
 
 ## Tecnologías utilizadas
 
@@ -22,9 +22,20 @@ SkillMatch/
 ├── backend/
 │   ├── src/
 │   │   ├── config/
-│   │   ├── controllers/
-│   │   ├── middleware/
-│   │   ├── routes/
+│   │   ├── middlewares/
+│   │   ├── modules/
+│   │   │   ├── categorias/
+│   │   │   │   ├── categorias.controller.js
+│   │   │   │   ├── categorias.repository.js
+│   │   │   │   ├── categorias.routes.js
+│   │   │   │   ├── categorias.service.js
+│   │   │   │   └── categorias.validation.js
+│   │   │   └── habilidades/
+│   │   │       ├── habilidades.controller.js
+│   │   │       ├── habilidades.repository.js
+│   │   │       ├── habilidades.routes.js
+│   │   │       ├── habilidades.service.js
+│   │   │       └── habilidades.validation.js
 │   │   └── server.js
 │   ├── .env.example
 │   └── package.json
@@ -83,7 +94,7 @@ Las rutas principales del frontend son:
 | `/registro` | Registro de usuario | `PublicLayout` |
 | `/admin/categorias` | Gestión de categorías | `AdminLayout` |
 
-## Módulo implementado
+## Módulos implementados
 
 ### Gestión de categorías
 
@@ -95,6 +106,114 @@ El módulo permite:
 - Eliminar una categoría.
 - Mostrar mensajes de éxito o error según el resultado de cada operación.
 - Confirmar la eliminación mediante un diálogo de confirmación.
+
+## Endpoints del módulo de categorías
+
+| Método   | Ruta                  | Descripción             |
+| -------- | --------------------- | ----------------------- |
+| `GET`    | `/api/categorias`     | Lista las categorías    |
+| `POST`   | `/api/categorias`     | Crea una categoría      |
+| `PUT`    | `/api/categorias/:id` | Actualiza una categoría |
+| `DELETE` | `/api/categorias/:id` | Elimina una categoría   |
+
+### Gestión de habilidades
+
+El módulo de habilidades permite administrar el catálogo de habilidades asociadas a las categorías de conocimiento. Cada habilidad pertenece a una categoría y puede ser utilizada posteriormente por los usuarios para registrar las habilidades que ofrecen o desean aprender.
+
+El módulo permite:
+
+- Listar todas las habilidades registradas.
+- Listar las habilidades asociadas a una categoría específica.
+- Consultar una habilidad por su identificador.
+- Crear una nueva habilidad asociada a una categoría existente.
+- Actualizar una habilidad existente.
+- Eliminar una habilidad.
+- Validar que la categoría indicada exista.
+- Evitar que se registre una habilidad duplicada dentro de la misma categoría.
+- Mostrar mensajes de éxito o error según el resultado de cada operación.
+
+### Endpoints del módulo de habilidades
+
+| Método   | Ruta                             | Descripción                                       |
+| -------- | -------------------------------- | ------------------------------------------------- |
+| `GET`    | `/api/habilidades`               | Lista todas las habilidades                       |
+| `GET`    | `/api/habilidades?categoriaId=1` | Lista las habilidades de una categoría específica |
+| `GET`    | `/api/habilidades/:id`           | Consulta una habilidad por su identificador       |
+| `POST`   | `/api/habilidades`               | Crea una habilidad                                |
+| `PUT`    | `/api/habilidades/:id`           | Actualiza una habilidad                           |
+| `DELETE` | `/api/habilidades/:id`           | Elimina una habilidad                             |
+
+### Ejemplo de creación de habilidad
+
+**Petición:**
+
+```http
+POST /api/habilidades
+Content-Type: application/json
+```
+
+```json
+{
+  "idCategoria": 1,
+  "nombre": "JavaScript",
+  "descripcion": "Lenguaje de programación para desarrollo web",
+  "estado": "activo"
+}
+```
+
+**Respuesta exitosa:**
+
+```json
+{
+  "success": true,
+  "message": "Habilidad creada correctamente.",
+  "data": {
+    "id_habilidad": 1,
+    "id_categoria": 1,
+    "categoria": "Programación",
+    "nombre": "JavaScript",
+    "descripcion": "Lenguaje de programación para desarrollo web",
+    "estado": "activo"
+  }
+}
+```
+
+## Pruebas del módulo
+
+Desde el frontend se pueden realizar las siguientes pruebas:
+
+1. Abrir la sección de categorías.
+2. Verificar que la lista cargue correctamente.
+3. Crear una categoría nueva.
+4. Editar una categoría existente.
+5. Eliminar una categoría mediante el diálogo de confirmación.
+6. Comprobar que la tabla se actualice después de cada operación.
+
+## Pruebas del módulo de habilidades
+
+Desde Postman se pueden realizar las siguientes pruebas:
+
+1. Listar todas las habilidades.
+2. Listar habilidades filtradas por categoría mediante el parámetro `categoriaId`.
+3. Consultar una habilidad por su identificador.
+4. Crear una habilidad asociada a una categoría existente.
+5. Intentar crear una habilidad sin categoría o con una categoría inexistente.
+6. Intentar crear una habilidad duplicada dentro de la misma categoría.
+7. Actualizar una habilidad existente.
+8. Eliminar una habilidad.
+9. Verificar que la lista se actualice correctamente después de cada operación.
+
+### Restricción recomendada
+
+Para evitar habilidades duplicadas dentro de una misma categoría, se ejecutó la siguiente restricción en la base de datos:
+
+```sql
+ALTER TABLE habilidad
+ADD CONSTRAINT uq_habilidad_nombre_categoria
+UNIQUE (id_categoria, nombre);
+```
+
+Esta restricción permite que exista una habilidad con el mismo nombre en categorías diferentes, pero impide duplicarla dentro de una misma categoría.
 
 ## Requisitos previos
 
@@ -161,26 +280,6 @@ El frontend quedará disponible en:
 ```text
 http://localhost:5173
 ```
-
-## Endpoints del módulo de categorías
-
-| Método   | Ruta                  | Descripción             |
-| -------- | --------------------- | ----------------------- |
-| `GET`    | `/api/categorias`     | Lista las categorías    |
-| `POST`   | `/api/categorias`     | Crea una categoría      |
-| `PUT`    | `/api/categorias/:id` | Actualiza una categoría |
-| `DELETE` | `/api/categorias/:id` | Elimina una categoría   |
-
-## Pruebas del módulo
-
-Desde el frontend se pueden realizar las siguientes pruebas:
-
-1. Abrir la sección de categorías.
-2. Verificar que la lista cargue correctamente.
-3. Crear una categoría nueva.
-4. Editar una categoría existente.
-5. Eliminar una categoría mediante el diálogo de confirmación.
-6. Comprobar que la tabla se actualice después de cada operación.
 
 ---
 
