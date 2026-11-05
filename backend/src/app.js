@@ -3,6 +3,8 @@ import { notFound } from './middlewares/notFound.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import categoriasRoutes from './modules/categorias/categorias.routes.js';
 import habilidadesRoutes from './modules/habilidades/habilidades.routes.js';
+import authRoutes from './modules/auth/auth.routes.js';
+import usuariosRoutes from './modules/usuarios/usuarios.routes.js';
 
 const app = express();
 
@@ -21,6 +23,8 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/categorias', categoriasRoutes);
 app.use('/api/habilidades', habilidadesRoutes);
+app.use('api/auth', authRoutes);
+app.use('/api/usuarios', usuariosRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

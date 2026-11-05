@@ -2,7 +2,7 @@
 
 SkillMatch es una plataforma web orientada al intercambio no monetario de conocimientos y habilidades. Permite que las personas publiquen habilidades que pueden enseñar, registren habilidades que desean aprender, busquen coincidencias, envíen solicitudes de conexión, se comuniquen y califiquen las experiencias de intercambio.
 
-Actualmente, el proyecto implementa los módulos de gestión de categorías y gestión de habilidades en el backend. Ambos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento y las habilidades asociadas a cada categoría.
+Actualmente, el proyecto implementa los módulos de gestión de categorías, gestión de habilidades, autenticación y usuarios en el backend. Estos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento, las habilidades asociadas a cada categoría, el registro de usuarios, el inicio de sesión y la consulta o actualización del perfil del usuario autenticado.
 
 ## Tecnologías utilizadas
 
@@ -11,6 +11,8 @@ Actualmente, el proyecto implementa los módulos de gestión de categorías y ge
 - Vite
 - Node.js
 - Express
+- JSON Web Token (JWT)
+- bcrypt
 - MariaDB / MySQL
 - Tailwind CSS v4
 - Inter, como tipografía principal
@@ -23,19 +25,33 @@ SkillMatch/
 │   ├── src/
 │   │   ├── config/
 │   │   ├── middlewares/
+│   │   │   ├── autenticacion.js
+│   │   │   ├── errorHandler.js
+│   │   │   └── notFound.js
 │   │   ├── modules/
+│   │   │   ├── auth/
+│   │   │   │   ├── auth.controller.js
+│   │   │   │   ├── auth.routes.js
+│   │   │   │   ├── auth.service.js
+│   │   │   │   └── auth.validation.js
 │   │   │   ├── categorias/
 │   │   │   │   ├── categorias.controller.js
 │   │   │   │   ├── categorias.repository.js
 │   │   │   │   ├── categorias.routes.js
 │   │   │   │   ├── categorias.service.js
 │   │   │   │   └── categorias.validation.js
-│   │   │   └── habilidades/
-│   │   │       ├── habilidades.controller.js
-│   │   │       ├── habilidades.repository.js
-│   │   │       ├── habilidades.routes.js
-│   │   │       ├── habilidades.service.js
-│   │   │       └── habilidades.validation.js
+│   │   │   ├── habilidades/
+│   │   │   │   ├── habilidades.controller.js
+│   │   │   │   ├── habilidades.repository.js
+│   │   │   │   ├── habilidades.routes.js
+│   │   │   │   ├── habilidades.service.js
+│   │   │   │   └── habilidades.validation.js
+│   │   │   └── usuarios/
+│   │   │       ├── usuarios.controller.js
+│   │   │       ├── usuarios.repository.js
+│   │   │       ├── usuarios.routes.js
+│   │   │       ├── usuarios.service.js
+│   │   │       └── usuarios.validation.js
 │   │   └── server.js
 │   ├── .env.example
 │   └── package.json
@@ -76,8 +92,10 @@ El frontend está organizado por responsabilidades:
 - `components/`: componentes reutilizables entre diferentes páginas o módulos.
 - `layouts/`: estructuras visuales compartidas. `PublicLayout` se utiliza en las
   páginas públicas y `AdminLayout` en las páginas administrativas.
-- `modules/`: funcionalidades agrupadas por dominio. Actualmente contiene el
+- - `modules/`: funcionalidades agrupadas por dominio. Actualmente contiene el
   módulo de categorías y sus componentes, validaciones y peticiones a la API.
+  Los módulos de habilidades, autenticación y usuarios actualmente están
+  implementados en el backend.
 - `pages/`: páginas asociadas a rutas de la aplicación. Las páginas públicas se
   encuentran en `pages/public/` y las páginas de autenticación en `pages/auth/`.
 - `services/`: servicios compartidos, como el cliente para comunicarse con el backend.
@@ -178,7 +196,166 @@ Content-Type: application/json
 }
 ```
 
-## Pruebas del módulo
+### Restricción recomendada
+
+Para evitar habilidades duplicadas dentro de una misma categoría, se ejecutó la siguiente restricción en la base de datos:
+
+```sql
+ALTER TABLE habilidad
+ADD CONSTRAINT uq_habilidad_nombre_categoria
+UNIQUE (id_categoria, nombre);
+```
+
+Esta restricción permite que exista una habilidad con el mismo nombre en categorías diferentes, pero impide duplicarla dentro de una misma categoría.
+
+### Autenticación y usuarios
+
+El módulo de autenticación permite registrar usuarios, iniciar sesión y generar un token JWT. Las contraseñas se almacenan cifradas mediante bcrypt, por lo que nunca se guardan en texto plano.
+
+Un token JWT permite identificar al usuario autenticado en las siguientes peticiones. Para acceder a una ruta protegida, el cliente debe enviar el token en el encabezado `Authorization` utilizando el esquema `Bearer`.
+
+```text
+Authorization: Bearer <token>
+```
+
+El módulo de usuarios permite consultar el perfil del usuario autenticado, actualizar sus datos básicos y consultar la información pública de otros usuarios.
+
+### Endpoints de autenticación
+
+| Método | Ruta                 | Protegido | Descripción                           |
+| ------ | -------------------- | --------- | ------------------------------------- |
+| `POST` | `/api/auth/registro` | No        | Registra un nuevo usuario             |
+| `POST` | `/api/auth/login`    | No        | Inicia sesión y devuelve un token JWT |
+
+### Endpoints de usuarios
+
+| Método | Ruta                   | Protegido | Descripción                                   |
+| ------ | ---------------------- | --------- | --------------------------------------------- |
+| `GET`  | `/api/usuarios/perfil` | Sí        | Consulta el perfil del usuario autenticado    |
+| `PUT`  | `/api/usuarios/perfil` | Sí        | Actualiza el perfil del usuario autenticado   |
+| `GET`  | `/api/usuarios/:id`    | No        | Consulta la información pública de un usuario |
+
+### Ejemplo de registro
+
+**Petición:**
+
+```http
+POST /api/auth/registro
+Content-Type: application/json
+```
+
+```json
+{
+  "nombres": "Diego",
+  "apellidos": "Santander",
+  "correoElectronico": "diego@example.com",
+  "contrasena": "12345678",
+  "alias": "diegosantander"
+}
+```
+
+**Respuesta exitosa:**
+
+```json
+{
+  "success": true,
+  "message": "Usuario registrado correctamente.",
+  "data": {
+    "idUsuario": 1,
+    "nombres": "Diego",
+    "apellidos": "Santander",
+    "correoElectronico": "diego@example.com",
+    "alias": "diegosantander",
+    "idRol": 2
+  }
+}
+```
+
+### Ejemplo de inicio de sesión
+
+**Petición:**
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+```
+
+```json
+{
+  "correoElectronico": "diego@example.com",
+  "contrasena": "12345678"
+}
+```
+
+**Respuesta exitosa:**
+
+```json
+{
+  "success": true,
+  "message": "Autenticación satisfactoria.",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "usuario": {
+      "idUsuario": 1,
+      "nombres": "Diego",
+      "apellidos": "Santander",
+      "correoElectronico": "diego@example.com",
+      "alias": "diegosantander",
+      "idRol": 2
+    }
+  }
+}
+```
+
+### Ejemplo de consulta del perfil protegido
+
+**Petición:**
+
+```http
+GET /api/usuarios/perfil
+Authorization: Bearer <token>
+```
+
+**Respuesta exitosa:**
+
+```json
+{
+  "success": true,
+  "message": "Perfil consultado correctamente.",
+  "data": {
+    "id_usuario": 1,
+    "id_rol": 2,
+    "rol": "usuario",
+    "nombres": "Diego",
+    "apellidos": "Santander",
+    "correo_electronico": "diego@example.com",
+    "alias": "diegosantander",
+    "estado_cuenta": "activo",
+    "fecha_registro": "2026-11-05T20:00:00.000Z",
+    "biografia": null,
+    "foto_perfil_url": null,
+    "disponibilidad": null,
+    "ciudad": null,
+    "pais": null
+  }
+}
+```
+
+### Variables de entorno de autenticación
+
+Además de las variables de conexión a la base de datos, el backend utiliza las siguientes variables:
+
+```env
+JWT_SECRET=cambia_esta_clave_en_produccion
+JWT_EXPIRES_IN=1h
+```
+
+- `JWT_SECRET`: clave secreta utilizada para firmar y verificar los tokens.
+- `JWT_EXPIRES_IN`: tiempo de expiración del token.
+
+Estas variables no deben compartirse ni subirse al repositorio.
+
+## Pruebas del módulo de categorías
 
 Desde el frontend se pueden realizar las siguientes pruebas:
 
@@ -203,17 +380,20 @@ Desde Postman se pueden realizar las siguientes pruebas:
 8. Eliminar una habilidad.
 9. Verificar que la lista se actualice correctamente después de cada operación.
 
-### Restricción recomendada
+## Pruebas del módulo de autenticación y usuarios
 
-Para evitar habilidades duplicadas dentro de una misma categoría, se ejecutó la siguiente restricción en la base de datos:
+Desde Postman se pueden realizar las siguientes pruebas:
 
-```sql
-ALTER TABLE habilidad
-ADD CONSTRAINT uq_habilidad_nombre_categoria
-UNIQUE (id_categoria, nombre);
-```
-
-Esta restricción permite que exista una habilidad con el mismo nombre en categorías diferentes, pero impide duplicarla dentro de una misma categoría.
+1. Registrar un usuario nuevo mediante `POST /api/auth/registro`.
+2. Intentar registrar un usuario con un correo electrónico duplicado.
+3. Iniciar sesión con credenciales válidas mediante `POST /api/auth/login`.
+4. Intentar iniciar sesión con una contraseña incorrecta.
+5. Copiar el token JWT recibido en el inicio de sesión.
+6. Consultar el perfil del usuario autenticado mediante `GET /api/usuarios/perfil`.
+7. Intentar consultar el perfil protegido sin enviar el token.
+8. Actualizar el perfil del usuario autenticado mediante `PUT /api/usuarios/perfil`.
+9. Consultar la información pública de un usuario mediante `GET /api/usuarios/:id`.
+10. Verificar que las rutas protegidas rechacen peticiones con un token inválido o expirado.
 
 ## Requisitos previos
 
