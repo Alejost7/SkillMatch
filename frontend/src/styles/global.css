@@ -1,9 +1,46 @@
 @import "tailwindcss";
 
+@theme {
+    --font-sans: "Inter", system-ui, sans-serif;
+
+    --color-primary: #60a5fa;
+    --color-primary-dark: #3b82f6;
+    --color-primary-light: #dbeafe;
+
+    --color-success: #34d399;
+    --color-success-light: #d1fae5;
+
+    --color-accent: #fbbf24;
+    --color-accent-light: #fef3c7;
+
+    --color-background: #020617;
+    --color-surface: #0f172a;
+    --color-surface-alt: #020617;
+
+    --color-text-main: #f1f5f9;
+    --color-text-muted: #94a3b8;
+
+    --color-danger: #ef4444;
+    --color-warning: #facc15;
+}
+
 body {
     margin: 0;
     min-width: 320px;
-    background-color: #f8fafc;
-    color: #0f172a;
-    font-family: Arial, sans-serif;
+    background-color: var(--color-background);
+    color: var(--color-text-main);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
 }
+
+/* Evita que los inputs usen estilos del navegador que rompan el tema oscuro */
+input,
+textarea,
+select,
+button {
+font-family: inherit;
+}
+
+// De acuerdo con los artefactos del ciclo del software realizados con anterioridad se mantiene el estilo oficial de SkillMatch.
+// Modo oscuro, con azul claro como color principal, verde esperalda, mostaza como acento. 
