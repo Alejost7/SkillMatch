@@ -23,7 +23,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/categorias', categoriasRoutes);
 app.use('/api/habilidades', habilidadesRoutes);
-app.use('api/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 
 app.use(notFound);

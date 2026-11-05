@@ -1,0 +1,137 @@
+ENDPOINTS DE LA API — SKILLMATCH
+Proyecto: SkillMatch
+Base URL: http://localhost:3000
+Tecnologías: Node.js, Express, MySQL/MariaDB, bcrypt y JWT
+
+=========================================================
+1. CATEGORÍAS
+=========================================================
+
+GET /api/categorias
+Descripción: Lista todas las categorías.
+Respuesta exitosa: 200 OK
+
+GET /api/categorias/:id
+Descripción: Consulta una categoría por su identificador.
+Respuesta exitosa: 200 OK
+
+POST /api/categorias
+Descripción: Crea una categoría.
+Cuerpo:
+{
+  "nombre": "HCI",
+  "descripcion": "Habilidades relacionadas con la interacción humana-computador",
+  "estado": "activo"
+}
+Respuesta exitosa: 201 Created
+
+PUT /api/categorias/:id
+Descripción: Actualiza una categoría.
+Cuerpo:
+{
+  "nombre": "HCI",
+  "descripcion": "Habilidades relacionadas con Human Computer Interaction",
+  "estado": "activo"
+}
+Respuesta exitosa: 200 OK
+
+DELETE /api/categorias/:id
+Descripción: Elimina una categoría.
+Respuesta exitosa: 200 OK
+
+=========================================================
+2. HABILIDADES
+=========================================================
+
+GET /api/habilidades
+Descripción: Lista todas las habilidades.
+Respuesta exitosa: 200 OK
+
+GET /api/habilidades?categoriaId=1
+Descripción: Lista las habilidades de una categoría específica.
+Respuesta exitosa: 200 OK
+
+GET /api/habilidades/:id
+Descripción: Consulta una habilidad por su identificador.
+Respuesta exitosa: 200 OK
+
+POST /api/habilidades
+Descripción: Crea una habilidad asociada a una categoría.
+Cuerpo:
+{
+  "idCategoria": 1,
+  "nombre": "Rust",
+  "descripcion": "Lenguaje de programación para desarrollo avanzado",
+  "estado": "activo"
+}
+Respuesta exitosa: 201 Created
+
+PUT /api/habilidades/:id
+Descripción: Actualiza una habilidad.
+Cuerpo:
+{
+  "idCategoria": 1,
+  "nombre": "JavaScript",
+  "descripcion": "Lenguaje de programación para desarrollo web",
+  "estado": "activo"
+}
+Respuesta exitosa: 200 OK
+
+DELETE /api/habilidades/:id
+Descripción: Elimina una habilidad.
+Respuesta exitosa: 200 OK
+
+=========================================================
+3. AUTENTICACIÓN
+=========================================================
+
+POST /api/auth/registro
+Descripción: Registra un nuevo usuario.
+Cuerpo:
+{
+  "nombres": "Diego",
+  "apellidos": "Santander",
+  "correoElectronico": "diego@example.com",
+  "contrasena": "12345678",
+  "alias": "diegosantander"
+}
+Respuesta exitosa: 201 Created
+
+POST /api/auth/login
+Descripción: Inicia sesión y devuelve un token JWT.
+Cuerpo:
+{
+  "correoElectronico": "diego@example.com",
+  "contrasena": "12345678"
+}
+Respuesta exitosa: 200 OK
+
+
+=========================================================
+4. USUARIOS
+=========================================================
+
+GET /api/usuarios/perfil
+Descripción: Consulta el perfil del usuario autenticado.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Respuesta exitosa: 200 OK
+
+PUT /api/usuarios/perfil
+Descripción: Actualiza el perfil del usuario autenticado.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Cuerpo:
+{
+  "nombres": "Diego Alejandro",
+  "apellidos": "Santander Toro",
+  "alias": "diegosantander"
+}
+Respuesta exitosa: 200 OK
+
+GET /api/usuarios/:id
+Descripción: Consulta la información pública de un usuario.
+Protegido: No
+Respuesta exitosa: 200 OK
