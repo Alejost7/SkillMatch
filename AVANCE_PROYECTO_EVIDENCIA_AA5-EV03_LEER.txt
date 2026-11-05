@@ -1,0 +1,138 @@
+EVIDENCIA GA7-220501096-AA5-EV03
+DISEÑO Y DESARROLLO DE SERVICIOS WEB – PROYECTO
+PROYECTO: SKILLMATCH
+APRENDIZ: DIEGO ALEJANDRO SANTANDER TORO
+FECHA: NOVIEMBRE DE 2026
+
+1. DESCRIPCIÓN DEL AVANCE
+
+Se avanzó en el diseño y desarrollo de los servicios web del proyecto SkillMatch,
+una plataforma orientada al intercambio no monetario de conocimientos y habilidades.
+Las API fueron desarrolladas con Node.js, Express y JavaScript, utilizando MySQL/MariaDB
+como base de datos relacional y JSON Web Token (JWT) para la autenticación.
+
+El backend está organizado por módulos y capas, separando rutas, validaciones,
+controladores, servicios y repositorios. Esta estructura permite mantener una separación
+clara entre la definición de los endpoints, la lógica de negocio y las consultas a la
+base de datos.
+
+2. MÓDULOS IMPLEMENTADOS
+
+2.1 Gestión de categorías
+
+Se implementó el CRUD completo para la gestión de categorías de conocimiento:
+
+- Listar categorías.
+- Consultar una categoría por su identificador.
+- Crear una categoría.
+- Actualizar una categoría.
+- Eliminar una categoría.
+- Validar los datos enviados por el cliente.
+- Evitar categorías duplicadas mediante una restricción de unicidad.
+- Manejar errores cuando una categoría no existe o cuando tiene habilidades asociadas.
+
+Endpoints implementados:
+
+- GET /api/categorias
+- GET /api/categorias/:id
+- POST /api/categorias
+- PUT /api/categorias/:id
+- DELETE /api/categorias/:id
+
+2.2 Gestión de habilidades
+
+Se implementó el módulo de habilidades, asociado a las categorías de conocimiento.
+Cada habilidad pertenece a una categoría y podrá ser utilizada posteriormente por los
+usuarios para registrar las habilidades que ofrecen o desean aprender.
+
+El módulo permite:
+
+- Listar todas las habilidades.
+- Listar habilidades filtradas por categoría mediante el parámetro categoriaId.
+- Consultar una habilidad por su identificador.
+- Crear una habilidad asociada a una categoría existente.
+- Actualizar una habilidad.
+- Eliminar una habilidad.
+- Validar que la categoría indicada exista.
+- Evitar habilidades duplicadas dentro de una misma categoría.
+
+Endpoints implementados:
+
+- GET /api/habilidades
+- GET /api/habilidades?categoriaId=1
+- GET /api/habilidades/:id
+- POST /api/habilidades
+- PUT /api/habilidades/:id
+- DELETE /api/habilidades/:id
+
+Además, se agregó una restricción de unicidad compuesta en la base de datos para evitar
+que existan dos habilidades con el mismo nombre dentro de una misma categoría:
+
+ALTER TABLE habilidad
+ADD CONSTRAINT uq_habilidad_nombre_categoria
+UNIQUE (id_categoria, nombre);
+
+2.3 Autenticación
+
+Se implementó el módulo de autenticación, que permite registrar usuarios e iniciar sesión.
+
+El registro valida los datos enviados, verifica que el correo electrónico y el alias no
+estén duplicados, cifra la contraseña con bcrypt y almacena el hash en la base de datos.
+Las contraseñas nunca se guardan en texto plano.
+
+El inicio de sesión busca el usuario por correo electrónico, compara la contraseña enviada
+con el hash almacenado mediante bcrypt y, si las credenciales son válidas, genera un token
+JWT. Este token permite identificar al usuario en las siguientes peticiones.
+
+Endpoints implementados:
+
+- POST /api/auth/registro
+- POST /api/auth/login
+
+2.4 Usuarios
+
+Se implementó el módulo de usuarios, que permite consultar y actualizar la información
+del usuario autenticado, así como consultar la información pública de otros usuarios.
+
+Endpoints implementados:
+
+- GET /api/usuarios/perfil
+- PUT /api/usuarios/perfil
+- GET /api/usuarios/:id
+
+Las rutas GET /api/usuarios/perfil y PUT /api/usuarios/perfil están protegidas mediante
+el middleware de autenticación. Para acceder a ellas, el cliente debe enviar el token JWT
+en el encabezado Authorization utilizando el esquema Bearer.
+
+3. MIDDLEWARE DE AUTENTICACIÓN
+
+Se creó el middleware autenticacion.js, encargado de verificar el token JWT enviado por
+el cliente en las rutas protegidas.
+
+El middleware realiza las siguientes acciones:
+
+- Verifica que la petición incluya el encabezado Authorization.
+- Valida que el token tenga el formato Bearer <token>.
+- Verifica que el token sea válido y no haya expirado.
+- Extrae la información del usuario autenticado y la guarda en req.usuario.
+- Permite continuar con el controlador únicamente si el token es válido.
+
+También se definió un middleware adicional para autorizar acciones exclusivas de
+administrador, el cual verifica el rol del usuario autenticado.
+
+4. DOCUMENTACIÓN
+
+La documentación de los servicios se encuentra en el archivo README.md del repositorio.
+Allí se describen los módulos implementados, los endpoints disponibles, los métodos HTTP,
+los cuerpos de petición, las respuestas esperadas, los códigos HTTP y las variables de
+entorno necesarias para ejecutar el proyecto.
+
+5. CONTROL DE VERSIONES
+
+El proyecto se encuentra versionado con Git y publicado en GitHub. Los cambios realizados
+en los módulos de categorías, habilidades, autenticación y usuarios fueron registrados
+mediante commits.
+
+Enlace del repositorio:
+
+https://github.com/Alejost7/SkillMatch
