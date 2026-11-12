@@ -3,6 +3,11 @@ Proyecto: SkillMatch
 Base URL: http://localhost:3000
 Tecnologías: Node.js, Express, MySQL/MariaDB, bcrypt y JWT
 
+Rutas protegidas: requieren el encabezado "Authorization: Bearer <token>".
+Las escrituras del catálogo (categorías y habilidades) requieren rol administrador.
+Las habilidades del usuario (sección 5) requieren un usuario autenticado y operan
+solo sobre sus propios registros.
+
 =========================================================
 1. CATEGORÍAS
 =========================================================
@@ -17,6 +22,9 @@ Respuesta exitosa: 200 OK
 
 POST /api/categorias
 Descripción: Crea una categoría.
+Protegido: Sí (solo administrador)
+Encabezado:
+Authorization: Bearer <token>
 Cuerpo:
 {
   "nombre": "HCI",
@@ -27,6 +35,9 @@ Respuesta exitosa: 201 Created
 
 PUT /api/categorias/:id
 Descripción: Actualiza una categoría.
+Protegido: Sí (solo administrador)
+Encabezado:
+Authorization: Bearer <token>
 Cuerpo:
 {
   "nombre": "HCI",
@@ -37,6 +48,9 @@ Respuesta exitosa: 200 OK
 
 DELETE /api/categorias/:id
 Descripción: Elimina una categoría.
+Protegido: Sí (solo administrador)
+Encabezado:
+Authorization: Bearer <token>
 Respuesta exitosa: 200 OK
 
 =========================================================
@@ -57,6 +71,9 @@ Respuesta exitosa: 200 OK
 
 POST /api/habilidades
 Descripción: Crea una habilidad asociada a una categoría.
+Protegido: Sí (solo administrador)
+Encabezado:
+Authorization: Bearer <token>
 Cuerpo:
 {
   "idCategoria": 1,
@@ -68,6 +85,9 @@ Respuesta exitosa: 201 Created
 
 PUT /api/habilidades/:id
 Descripción: Actualiza una habilidad.
+Protegido: Sí (solo administrador)
+Encabezado:
+Authorization: Bearer <token>
 Cuerpo:
 {
   "idCategoria": 1,
@@ -79,6 +99,9 @@ Respuesta exitosa: 200 OK
 
 DELETE /api/habilidades/:id
 Descripción: Elimina una habilidad.
+Protegido: Sí (solo administrador)
+Encabezado:
+Authorization: Bearer <token>
 Respuesta exitosa: 200 OK
 
 =========================================================
@@ -96,6 +119,8 @@ Cuerpo:
   "alias": "diegosantander"
 }
 Respuesta exitosa: 201 Created
+El rol asignado se obtiene por nombre desde la tabla rol (siempre "usuario").
+La respuesta incluye los campos idRol y rol.
 
 POST /api/auth/login
 Descripción: Inicia sesión y devuelve un token JWT.
@@ -105,6 +130,12 @@ Cuerpo:
   "contrasena": "12345678"
 }
 Respuesta exitosa: 200 OK
+El token incluye idUsuario, idRol, rol y correoElectronico.
+También se actualiza la fecha de último acceso del usuario.
+
+Roles del sistema:
+  id_rol = 1 -> usuario
+  id_rol = 2 -> administrador (se asigna manualmente con UPDATE usuario)
 
 
 =========================================================
@@ -127,11 +158,113 @@ Cuerpo:
 {
   "nombres": "Diego Alejandro",
   "apellidos": "Santander Toro",
-  "alias": "diegosantander"
+  "alias": "diegosantander",
+  "biografia": "Estudiante de ingeniería de sistemas",
+  "fotoPerfilUrl": "https://ejemplo.com/foto.png",
+  "disponibilidad": "Tardes y fines de semana",
+  "ciudad": "Bogotá",
+  "pais": "Colombia"
 }
+Nota: "nombres" y "apellidos" son obligatorios. Los cinco campos finales son
+opcionales y se guardan en la tabla perfil; si no se envían, se conserva el
+valor anterior. Enviar null o una cadena vacía limpia el campo.
 Respuesta exitosa: 200 OK
 
 GET /api/usuarios/:id
 Descripción: Consulta la información pública de un usuario.
 Protegido: No
+Respuesta exitosa: 200 OK
+
+=========================================================
+5. HABILIDADES DEL USUARIO
+=========================================================
+Todas las rutas son privadas: el usuario se identifica con el token y solo puede
+consultar o modificar sus propios registros.
+Valores permitidos:
+  nivel / nivelDeseado -> basico, intermedio, avanzado
+  estado               -> activo, inactivo
+
+GET /api/habilidades-usuario/ofrecidas
+Descripción: Lista las habilidades que ofrece el usuario autenticado.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Respuesta exitosa: 200 OK
+
+POST /api/habilidades-usuario/ofrecidas
+Descripción: Registra una habilidad que el usuario ofrece.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Cuerpo:
+{
+  "idHabilidad": 1,
+  "nivel": "avanzado",
+  "descripcionApoyo": "Clases los sábados por la mañana",
+  "estado": "activo"
+}
+Nota: "descripcionApoyo" y "estado" son opcionales; el estado por defecto es
+"activo". La habilidad debe existir (404) y estar activa (409). No se puede
+repetir la misma habilidad en la lista (409).
+Respuesta exitosa: 201 Created
+
+PUT /api/habilidades-usuario/ofrecidas/:id
+Descripción: Actualiza una habilidad ofrecida.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Cuerpo:
+{
+  "nivel": "intermedio",
+  "descripcionApoyo": null
+}
+Nota: todos los campos son opcionales, pero se debe enviar al menos uno (400).
+Enviar null o una cadena vacía limpia la descripción.
+Respuesta exitosa: 200 OK
+
+DELETE /api/habilidades-usuario/ofrecidas/:id
+Descripción: Elimina una habilidad ofrecida.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Respuesta exitosa: 200 OK
+
+GET /api/habilidades-usuario/requeridas
+Descripción: Lista las habilidades que el usuario desea aprender.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Respuesta exitosa: 200 OK
+
+POST /api/habilidades-usuario/requeridas
+Descripción: Registra una habilidad que el usuario desea aprender.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Cuerpo:
+{
+  "idHabilidad": 2,
+  "nivelDeseado": "basico",
+  "objetivoAprendizaje": "Automatizar tareas repetitivas"
+}
+Nota: "nivelDeseado" y "objetivoAprendizaje" son opcionales.
+Respuesta exitosa: 201 Created
+
+PUT /api/habilidades-usuario/requeridas/:id
+Descripción: Actualiza una habilidad requerida.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Cuerpo:
+{
+  "nivelDeseado": "intermedio",
+  "objetivoAprendizaje": "Consultar bases de datos con SQL"
+}
+Respuesta exitosa: 200 OK
+
+DELETE /api/habilidades-usuario/requeridas/:id
+Descripción: Elimina una habilidad requerida.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
 Respuesta exitosa: 200 OK

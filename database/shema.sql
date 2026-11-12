@@ -123,6 +123,12 @@ CREATE TABLE habilidad (
     descripcion VARCHAR(255),
     estado VARCHAR(20) NOT NULL DEFAULT 'activo',
 
+    -- Una habilidad no puede repetirse dentro de la misma categoría.
+    -- En bases creadas antes de esta versión, aplica la migración:
+    -- database/migrations/001_uq_habilidad_nombre_categoria.sql
+    CONSTRAINT uq_habilidad_nombre_categoria
+        UNIQUE (id_categoria, nombre),
+
     CONSTRAINT fk_habilidad_categoria
         FOREIGN KEY (id_categoria)
         REFERENCES categoria (id_categoria)

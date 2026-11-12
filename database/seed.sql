@@ -7,23 +7,37 @@ USE skillmatch;
 -- =========================================================
 -- 1. ROLES
 -- =========================================================
+-- El backend identifica el rol "usuario" por su nombre, no por el id.
+-- De todos modos, se usan los ids 1 y 2 porque están documentados en el
+-- README y en ENDPOINTS.TXT (1 = usuario, 2 = administrador).
+-- La doble condición evita duplicados tanto por nombre como por id.
 
-INSERT INTO rol (nombre, descripcion, estado)
+INSERT INTO rol (id_rol, nombre, descripcion, estado)
 SELECT
+    1,
     'usuario',
     'Persona registrada que ofrece y solicita habilidades.',
     'activo'
+FROM DUAL
 WHERE NOT EXISTS (
     SELECT 1 FROM rol WHERE nombre = 'usuario'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM rol WHERE id_rol = 1
 );
 
-INSERT INTO rol (nombre, descripcion, estado)
+INSERT INTO rol (id_rol, nombre, descripcion, estado)
 SELECT
+    2,
     'administrador',
     'Persona encargada de gestionar y moderar la plataforma.',
     'activo'
+FROM DUAL
 WHERE NOT EXISTS (
     SELECT 1 FROM rol WHERE nombre = 'administrador'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM rol WHERE id_rol = 2
 );
 
 -- =========================================================
@@ -192,3 +206,13 @@ WHERE c.nombre = 'Música'
         WHERE h.id_categoria = c.id_categoria
             AND h.nombre = 'Guitarra'
     );
+
+-- =========================================================
+-- VERIFICACIÓN DE LOS DATOS INICIALES
+-- =========================================================
+-- 1 = usuario, 2 = administrador. Si esta consulta no devuelve dos filas,
+-- el backend no podrá asignar roles y el registro fallará con un error claro.
+
+SELECT id_rol, nombre, estado
+FROM rol
+ORDER BY id_rol;

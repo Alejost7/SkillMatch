@@ -22,8 +22,13 @@ Actualmente, el proyecto implementa los módulos de gestión de categorías, ges
 ```text
 SkillMatch/
 ├── backend/
+│   ├── scripts/
+│   │   └── migrar.js
 │   ├── src/
 │   │   ├── config/
+│   │   │   ├── database.js
+│   │   │   ├── env.js
+│   │   │   └── roles.js
 │   │   ├── middlewares/
 │   │   │   ├── autenticacion.js
 │   │   │   ├── errorHandler.js
@@ -46,17 +51,42 @@ SkillMatch/
 │   │   │   │   ├── habilidades.routes.js
 │   │   │   │   ├── habilidades.service.js
 │   │   │   │   └── habilidades.validation.js
+│   │   │   ├── habilidades-usuario/
+│   │   │   │   ├── habilidades-usuario.controller.js
+│   │   │   │   ├── habilidades-usuario.repository.js
+│   │   │   │   ├── habilidades-usuario.routes.js
+│   │   │   │   ├── habilidades-usuario.service.js
+│   │   │   │   └── habilidades-usuario.validation.js
 │   │   │   └── usuarios/
 │   │   │       ├── usuarios.controller.js
 │   │   │       ├── usuarios.repository.js
 │   │   │       ├── usuarios.routes.js
 │   │   │       ├── usuarios.service.js
 │   │   │       └── usuarios.validation.js
+│   │   ├── utils/
+│   │   │   └── campos.js
 │   │   └── server.js
+│   ├── tests/
+│   │   ├── config/
+│   │   │   └── env.test.js
+│   │   ├── helpers/
+│   │   │   └── fakes.js
+│   │   ├── middlewares/
+│   │   │   ├── autenticacion.test.js
+│   │   │   ├── errorHandler.test.js
+│   │   │   └── notFound.test.js
+│   │   ├── modules/
+│   │   │   ├── habilidades-usuario.validation.test.js
+│   │   │   └── validaciones.test.js
+│   │   ├── app.test.js
+│   │   └── entorno-pruebas.js
 │   ├── .env.example
 │   └── package.json
 ├── database/
-│   └── scripts SQL
+│   ├── migrations/
+│   │   └── 001_uq_habilidad_nombre_categoria.sql
+│   ├── seed.sql
+│   └── shema.sql
 └── frontend/
     ├── src/
     │   ├── components/
@@ -127,12 +157,14 @@ El módulo permite:
 
 ## Endpoints del módulo de categorías
 
-| Método   | Ruta                  | Descripción             |
-| -------- | --------------------- | ----------------------- |
-| `GET`    | `/api/categorias`     | Lista las categorías    |
-| `POST`   | `/api/categorias`     | Crea una categoría      |
-| `PUT`    | `/api/categorias/:id` | Actualiza una categoría |
-| `DELETE` | `/api/categorias/:id` | Elimina una categoría   |
+Las consultas del catálogo son públicas; crear, actualizar o eliminar exige un token de un usuario con rol `administrador`.
+
+| Método   | Ruta                  | Protegido           | Descripción             |
+| -------- | --------------------- | ------------------- | ----------------------- |
+| `GET`    | `/api/categorias`     | No                  | Lista las categorías    |
+| `POST`   | `/api/categorias`     | Sí (administrador)  | Crea una categoría      |
+| `PUT`    | `/api/categorias/:id` | Sí (administrador)  | Actualiza una categoría |
+| `DELETE` | `/api/categorias/:id` | Sí (administrador)  | Elimina una categoría   |
 
 ### Gestión de habilidades
 
@@ -152,14 +184,16 @@ El módulo permite:
 
 ### Endpoints del módulo de habilidades
 
-| Método   | Ruta                             | Descripción                                       |
-| -------- | -------------------------------- | ------------------------------------------------- |
-| `GET`    | `/api/habilidades`               | Lista todas las habilidades                       |
-| `GET`    | `/api/habilidades?categoriaId=1` | Lista las habilidades de una categoría específica |
-| `GET`    | `/api/habilidades/:id`           | Consulta una habilidad por su identificador       |
-| `POST`   | `/api/habilidades`               | Crea una habilidad                                |
-| `PUT`    | `/api/habilidades/:id`           | Actualiza una habilidad                           |
-| `DELETE` | `/api/habilidades/:id`           | Elimina una habilidad                             |
+Las consultas del catálogo son públicas; crear, actualizar o eliminar exige un token de un usuario con rol `administrador`.
+
+| Método   | Ruta                             | Protegido          | Descripción                                       |
+| -------- | -------------------------------- | ------------------ | ------------------------------------------------- |
+| `GET`    | `/api/habilidades`               | No                 | Lista todas las habilidades                       |
+| `GET`    | `/api/habilidades?categoriaId=1` | No                 | Lista las habilidades de una categoría específica |
+| `GET`    | `/api/habilidades/:id`           | No                 | Consulta una habilidad por su identificador       |
+| `POST`   | `/api/habilidades`               | Sí (administrador) | Crea una habilidad                                |
+| `PUT`    | `/api/habilidades/:id`           | Sí (administrador) | Actualiza una habilidad                           |
+| `DELETE` | `/api/habilidades/:id`           | Sí (administrador) | Elimina una habilidad                             |
 
 ### Ejemplo de creación de habilidad
 
@@ -167,6 +201,7 @@ El módulo permite:
 
 ```http
 POST /api/habilidades
+Authorization: Bearer <token de administrador>
 Content-Type: application/json
 ```
 
@@ -196,17 +231,26 @@ Content-Type: application/json
 }
 ```
 
-### Restricción recomendada
+### Restricción única de habilidades por categoría
 
-Para evitar habilidades duplicadas dentro de una misma categoría, se ejecutó la siguiente restricción en la base de datos:
+Para evitar habilidades duplicadas dentro de una misma categoría, la tabla `habilidad` incluye la restricción:
 
 ```sql
-ALTER TABLE habilidad
-ADD CONSTRAINT uq_habilidad_nombre_categoria
-UNIQUE (id_categoria, nombre);
+CONSTRAINT uq_habilidad_nombre_categoria
+UNIQUE (id_categoria, nombre)
 ```
 
 Esta restricción permite que exista una habilidad con el mismo nombre en categorías diferentes, pero impide duplicarla dentro de una misma categoría.
+
+La restricción ya forma parte de `database/shema.sql`. Si la base de datos se creó antes de esta versión, aplica la migración incluida en el repositorio:
+
+```bash
+cd backend
+npm run db:migrate             # solo informa qué migraciones existen
+npm run db:migrate -- --aplicar  # aplica los cambios pendientes
+```
+
+Las migraciones de `database/migrations/` comprueban antes de crear la restricción, por lo que se pueden ejecutar varias veces sin duplicarla ni generar errores.
 
 ### Autenticación y usuarios
 
@@ -323,23 +367,135 @@ Authorization: Bearer <token>
   "success": true,
   "message": "Perfil consultado correctamente.",
   "data": {
-    "id_usuario": 1,
-    "id_rol": 2,
+    "idUsuario": 1,
+    "idRol": 1,
     "rol": "usuario",
     "nombres": "Diego",
     "apellidos": "Santander",
-    "correo_electronico": "diego@example.com",
     "alias": "diegosantander",
-    "estado_cuenta": "activo",
-    "fecha_registro": "2026-11-05T20:00:00.000Z",
-    "biografia": null,
-    "foto_perfil_url": null,
-    "disponibilidad": null,
-    "ciudad": null,
-    "pais": null
+    "correoElectronico": "diego@example.com",
+    "estadoCuenta": "activo",
+    "fechaRegistro": "2026-11-05T20:00:00.000Z",
+    "ultimoAcceso": "2026-11-05T20:15:00.000Z",
+    "perfil": {
+      "biografia": null,
+      "fotoPerfilUrl": null,
+      "disponibilidad": null,
+      "ciudad": null,
+      "pais": null
+    }
   }
 }
 ```
+
+Todas las respuestas del módulo usan `camelCase`. Los datos de la tabla `perfil` se agrupan en el objeto `perfil`; el correo, el estado de la cuenta y el último acceso solo se devuelven en el perfil propio, nunca en la consulta pública `GET /api/usuarios/:id`.
+
+### Ejemplo de actualización del perfil
+
+**Petición:**
+
+```http
+PUT /api/usuarios/perfil
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "nombres": "Diego Alejandro",
+  "apellidos": "Santander Toro",
+  "alias": "diegosantander",
+  "biografia": "Estudiante de ingeniería de sistemas",
+  "fotoPerfilUrl": "https://ejemplo.com/foto.png",
+  "disponibilidad": "Tardes y fines de semana",
+  "ciudad": "Bogotá",
+  "pais": "Colombia"
+}
+```
+
+`nombres` y `apellidos` son obligatorios. Los cinco campos finales son opcionales y se guardan en la tabla `perfil`; si no se envían, se conserva el valor anterior, y enviar `null` o una cadena vacía limpia el campo.
+
+### Habilidades ofrecidas y requeridas
+
+El módulo de habilidades del usuario permite registrar qué habilidades ofrece cada persona y cuáles desea aprender. Cada registro asocia al usuario autenticado con una habilidad del catálogo.
+
+- Un usuario **ofrece** una habilidad indicando su nivel (`basico`, `intermedio` o `avanzado`) y una descripción de apoyo opcional.
+- Un usuario **requiere** (quiere aprender) una habilidad, con un nivel deseado y un objetivo de aprendizaje opcionales.
+- La habilidad debe existir en el catálogo y estar activa; si no existe la API responde `404` y si está inactiva `409`.
+- No se puede repetir la misma habilidad dos veces en la misma lista (restricciones `uq_ofrecida_usuario_habilidad` y `uq_requerida_usuario_habilidad`); la API responde `409`.
+- Todas las rutas son privadas y trabajan únicamente con los registros del usuario autenticado: usar el identificador de otra persona responde `404`.
+- Las actualizaciones son parciales: solo se modifican los campos enviados y los textos opcionales aceptan `null` para limpiarse.
+
+### Endpoints de habilidades del usuario
+
+| Método   | Ruta                                            | Protegido | Descripción                                       |
+| -------- | ----------------------------------------------- | --------- | ------------------------------------------------- |
+| `GET`    | `/api/habilidades-usuario/ofrecidas`            | Sí        | Lista las habilidades que ofrece el usuario       |
+| `POST`   | `/api/habilidades-usuario/ofrecidas`            | Sí        | Registra una habilidad ofrecida                   |
+| `PUT`    | `/api/habilidades-usuario/ofrecidas/:id`        | Sí        | Actualiza una habilidad ofrecida                  |
+| `DELETE` | `/api/habilidades-usuario/ofrecidas/:id`        | Sí        | Elimina una habilidad ofrecida                    |
+| `GET`    | `/api/habilidades-usuario/requeridas`           | Sí        | Lista las habilidades que el usuario desea aprender |
+| `POST`   | `/api/habilidades-usuario/requeridas`           | Sí        | Registra una habilidad requerida                  |
+| `PUT`    | `/api/habilidades-usuario/requeridas/:id`       | Sí        | Actualiza una habilidad requerida                 |
+| `DELETE` | `/api/habilidades-usuario/requeridas/:id`       | Sí        | Elimina una habilidad requerida                   |
+
+### Ejemplo de registro de habilidad ofrecida
+
+**Petición:**
+
+```http
+POST /api/habilidades-usuario/ofrecidas
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "idHabilidad": 1,
+  "nivel": "avanzado",
+  "descripcionApoyo": "Clases los sábados por la mañana",
+  "estado": "activo"
+}
+```
+
+**Respuesta `201 Created`:**
+
+```json
+{
+  "success": true,
+  "message": "Habilidad ofrecida registrada correctamente.",
+  "data": {
+    "idHabilidadOfrecida": 12,
+    "idHabilidad": 1,
+    "habilidad": "JavaScript",
+    "idCategoria": 1,
+    "categoria": "Programación",
+    "nivel": "avanzado",
+    "descripcionApoyo": "Clases los sábados por la mañana",
+    "estado": "activo",
+    "fechaRegistro": "2026-11-12T14:30:00.000Z"
+  }
+}
+```
+
+### Ejemplo de actualización parcial
+
+**Petición:**
+
+```http
+PUT /api/habilidades-usuario/requeridas/5
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "nivelDeseado": "intermedio",
+  "objetivoAprendizaje": "Consultar bases de datos con SQL"
+}
+```
+
+En la actualización todos los campos son opcionales, pero se debe enviar al menos uno. Los textos opcionales (`descripcionApoyo`, `objetivoAprendizaje`) y el `nivelDeseado` aceptan `null` o una cadena vacía para limpiarse; el `nivel` de una habilidad ofrecida solo admite los tres valores permitidos.
 
 ### Variables de entorno de autenticación
 
@@ -350,14 +506,71 @@ JWT_SECRET=cambia_esta_clave_en_produccion
 JWT_EXPIRES_IN=1h
 ```
 
-- `JWT_SECRET`: clave secreta utilizada para firmar y verificar los tokens.
-- `JWT_EXPIRES_IN`: tiempo de expiración del token.
+- `JWT_SECRET`: clave secreta utilizada para firmar y verificar los tokens. Es **obligatoria** y debe tener al menos 16 caracteres. El backend no arranca si falta o es demasiado corta, y muestra un mensaje indicando exactamente qué variable corregir.
+- `JWT_EXPIRES_IN`: tiempo de expiración del token. Acepta el formato de `jsonwebtoken` (`30m`, `1h`, `7d`). Si se omite, se usa `1h`.
 
-Estas variables no deben compartirse ni subirse al repositorio.
+Si `JWT_SECRET` conserva el valor de ejemplo de `.env.example`, el arranque muestra una advertencia en la consola.
+
+Estas variables no deben compartirse ni subirse al repositorio. Para generar una clave segura:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+La validación de toda la configuración vive en `backend/src/config/env.js` y se ejecuta al arrancar el backend.
+
+### Roles del sistema
+
+| Id | Nombre          | Descripción                                        |
+| -- | --------------- | -------------------------------------------------- |
+| 1  | `usuario`       | Persona registrada que ofrece y solicita habilidades |
+| 2  | `administrador` | Persona encargada de gestionar y moderar la plataforma |
+
+El backend identifica el rol por su **nombre** (`backend/src/config/roles.js`) y usa el id solo como respaldo. Los roles se cargan con `database/seed.sql`.
+
+El registro público siempre crea usuarios con el rol `usuario`. Para probar funciones administrativas, promueve manualmente una cuenta ya registrada:
+
+```sql
+USE skillmatch;
+
+UPDATE usuario
+SET id_rol = 2
+WHERE correo_electronico = 'tu_correo@ejemplo.com';
+
+-- Verificación
+SELECT u.correo_electronico, r.nombre AS rol
+FROM usuario u
+INNER JOIN rol r ON r.id_rol = u.id_rol
+WHERE u.correo_electronico = 'tu_correo@ejemplo.com';
+```
+
+Después de la promoción hay que iniciar sesión de nuevo para que el token incluya el rol actualizado.
+
+## Pruebas automatizadas del backend
+
+El backend incluye una suite de pruebas construida con el runner nativo de Node (`node:test` y `node:assert`), por lo que no requiere dependencias adicionales ni una base de datos en ejecución.
+
+```bash
+cd backend
+npm test          # ejecuta la suite completa
+npm run test:watch  # vuelve a ejecutar al guardar cambios
+```
+
+Qué cubre la suite:
+
+- Validación de la configuración del entorno (`tests/config/env.test.js`): variables obligatorias, puertos, `JWT_SECRET` y `JWT_EXPIRES_IN`, mensajes de error agregados y advertencias.
+- Autenticación (`tests/middlewares/autenticacion.test.js`): formato del encabezado `Authorization`, tokens válidos, expirados, firmados con otro secreto o sin firma, y autorización de administrador.
+- Manejo de errores (`tests/middlewares/errorHandler.test.js`) y rutas inexistentes (`tests/middlewares/notFound.test.js`).
+- Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores.
+- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones y el 401 de las ocho rutas de habilidades del usuario.
+
+La suite completa suma 103 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
+
+El archivo `tests/entorno-pruebas.js` define variables de entorno mínimas para que las pruebas puedan cargar la configuración sin depender de un `.env` específico.
 
 ## Pruebas del módulo de categorías
 
-Desde el frontend se pueden realizar las siguientes pruebas:
+Desde el frontend se pueden realizar las siguientes pruebas. Crear, editar o eliminar exige un token de administrador (ver la sección de promoción de administrador):
 
 1. Abrir la sección de categorías.
 2. Verificar que la lista cargue correctamente.
@@ -365,10 +578,11 @@ Desde el frontend se pueden realizar las siguientes pruebas:
 4. Editar una categoría existente.
 5. Eliminar una categoría mediante el diálogo de confirmación.
 6. Comprobar que la tabla se actualice después de cada operación.
+7. Verificar que la creación, edición y eliminación devuelvan 401 sin token y 403 con un usuario que no sea administrador.
 
 ## Pruebas del módulo de habilidades
 
-Desde Postman se pueden realizar las siguientes pruebas:
+Desde Postman se pueden realizar las siguientes pruebas. Crear, editar o eliminar exige un token de administrador:
 
 1. Listar todas las habilidades.
 2. Listar habilidades filtradas por categoría mediante el parámetro `categoriaId`.
@@ -395,6 +609,22 @@ Desde Postman se pueden realizar las siguientes pruebas:
 9. Consultar la información pública de un usuario mediante `GET /api/usuarios/:id`.
 10. Verificar que las rutas protegidas rechacen peticiones con un token inválido o expirado.
 
+## Pruebas del módulo de habilidades del usuario
+
+Desde Postman se pueden realizar las siguientes pruebas. Todas las rutas exigen un token de cualquier usuario autenticado y operan sobre sus propios registros:
+
+1. Listar las habilidades ofrecidas mediante `GET /api/habilidades-usuario/ofrecidas`.
+2. Registrar una habilidad ofrecida con `nivel` válido.
+3. Intentar registrar la misma habilidad ofrecida dos veces (debe responder `409`).
+4. Intentar registrar una habilidad inexistente (`404`) o inactiva (`409`).
+5. Actualizar solo el nivel de una habilidad ofrecida y comprobar que la descripción se conserve.
+6. Enviar `descripcionApoyo: null` y comprobar que el campo se limpie.
+7. Registrar una habilidad requerida con `nivelDeseado` y `objetivoAprendizaje`.
+8. Actualizar una habilidad requerida sin enviar campos (debe responder `400`).
+9. Eliminar un registro y volver a intentarlo (debe responder `404`).
+10. Usar el identificador de un registro de otro usuario y comprobar que responda `404`.
+11. Verificar que las ocho rutas respondan `401` cuando no se envía el token.
+
 ## Requisitos previos
 
 Antes de ejecutar el proyecto, instala:
@@ -414,9 +644,17 @@ npm -v
 ## Configuración de la base de datos
 
 1. Crea la base de datos en MariaDB o MySQL.
-2. Ejecuta los scripts SQL ubicados en la carpeta `database/`.
-3. Copia el archivo `.env.example` como `.env` dentro de `backend/`.
-4. Configura las credenciales de tu base de datos.
+2. Ejecuta `database/shema.sql` para crear las tablas (incluye la restricción única de habilidades por categoría).
+3. Ejecuta `database/seed.sql` para cargar los roles (1 = usuario, 2 = administrador) y los datos iniciales. Ambos scripts se pueden volver a ejecutar sin duplicar datos.
+4. Si la base de datos ya existía antes de esta versión, aplica las migraciones pendientes:
+
+   ```bash
+   cd backend
+   npm run db:migrate -- --aplicar
+   ```
+
+5. Copia el archivo `.env.example` como `.env` dentro de `backend/`.
+6. Configura las credenciales de tu base de datos y un `JWT_SECRET` propio de al menos 16 caracteres.
 
 Ejemplo de variables de entorno:
 
@@ -427,7 +665,11 @@ DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=tu_contraseña
 DB_NAME=skillmatch
+JWT_SECRET=una_clave_larga_y_dificil_de_adivinar
+JWT_EXPIRES_IN=1h
 ```
+
+El backend valida estas variables al arrancar: si falta alguna o tiene un formato inválido, no inicia y muestra el listado de errores encontrados.
 
 ## Instalación y ejecución
 
@@ -443,6 +685,13 @@ El backend quedará disponible en:
 
 ```text
 http://localhost:3000
+```
+
+Para ejecutar las pruebas automatizadas del backend:
+
+```bash
+cd backend
+npm test
 ```
 
 ### Frontend
