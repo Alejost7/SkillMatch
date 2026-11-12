@@ -9,6 +9,8 @@ Las habilidades del usuario (sección 5) requieren un usuario autenticado y oper
 solo sobre sus propios registros.
 Las solicitudes de conexión y las conexiones (secciones 6 y 7) también requieren
 un usuario autenticado y solo permiten actuar sobre los registros propios.
+La mensajería (sección 8) solo permite leer y escribir en las conexiones en las
+que el usuario participa y solo envía mientras la conexión esté activa.
 
 =========================================================
 1. CATEGORÍAS
@@ -420,8 +422,9 @@ Encabezado:
 Authorization: Bearer <token>
 Parámetros opcionales: estado, page, limit
 Ejemplo: GET /api/conexiones?estado=activa&page=1&limit=10
-Nota: cada conexión incluye los datos públicos de emisor y receptor, y el campo
-"interlocutor" con la otra persona vista desde el usuario autenticado.
+Nota: cada conexión incluye los datos públicos de emisor y receptor, el campo
+"interlocutor" con la otra persona vista desde el usuario autenticado y
+"noLeidos" con los mensajes recibidos que aún no se leyeron.
 Respuesta exitosa: 200 OK (data + paginacion)
 
 GET /api/conexiones/:id
@@ -440,3 +443,64 @@ Authorization: Bearer <token>
 Nota: puede hacerlo cualquiera de los dos participantes (404 si no participa).
 Si la conexión ya no está activa responde 409.
 Respuesta exitosa: 200 OK
+
+=========================================================
+8. MENSAJERÍA
+=========================================================
+Todas las rutas son privadas: solo los dos participantes de una conexión pueden
+leer y escribir sus mensajes. Cualquier otro usuario recibe 404.
+Valores permitidos:
+  conexionId -> entero positivo (filtro opcional del listado)
+  contenido  -> texto de 1 a 1000 caracteres (se guarda recortado)
+  page       -> entero entre 1 y 100000 (por defecto 1)
+  limit      -> entero entre 1 y 50 (por defecto 10)
+
+POST /api/mensajes
+Descripción: Envía un mensaje a una conexión activa.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Cuerpo:
+{
+  "idConexion": 7,
+  "contenido": "Hola, ¿nos vemos el sábado para practicar?"
+}
+Nota: si la conexión no existe o el usuario no participa responde 404.
+Si la conexión está finalizada o bloqueada responde 409.
+Respuesta exitosa: 201 Created
+Campos de cada mensaje: idMensaje, idConexion, remitente (idUsuario, nombres,
+apellidos, alias), contenido, leido, fechaEnvio y esPropio.
+
+GET /api/mensajes
+Descripción: Lista los mensajes visibles para el usuario autenticado.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Parámetros opcionales: conexionId, page, limit
+Ejemplo: GET /api/mensajes?conexionId=7&page=1&limit=20
+Nota: el orden es cronológico ascendente. Sin conexionId se listan los mensajes
+de todas las conexiones del usuario. Si la conexión indicada no existe o no le
+pertenece responde 404.
+Respuesta exitosa: 200 OK (data + paginacion)
+
+PATCH /api/mensajes/leidos
+Descripción: Marca como leídos los mensajes recibidos en una conexión.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Cuerpo:
+{
+  "idConexion": 7
+}
+Nota: solo afecta a los mensajes que el usuario recibió; los propios no se tocan.
+Si la conexión no existe o el usuario no participa responde 404.
+Respuesta exitosa: 200 OK (data: idConexion y actualizados)
+
+GET /api/mensajes/no-leidos
+Descripción: Resume los mensajes sin leer del usuario agrupados por conexión.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Respuesta exitosa: 200 OK (data: total y porConexion)
+Nota: las rutas de conexiones (sección 7) incluyen el campo "noLeidos" con la
+misma información aplicada a cada conexión del listado.

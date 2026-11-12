@@ -542,3 +542,83 @@ test('GET /api/conexiones/abc responde 400 con token', async () => {
     );
 });
 
+test('las rutas de mensajes están protegidas', async () => {
+    const rutas = [
+        ['GET', '/api/mensajes'],
+        ['GET', '/api/mensajes/no-leidos'],
+        ['POST', '/api/mensajes'],
+        ['PATCH', '/api/mensajes/leidos']
+    ];
+
+    for (const [metodo, ruta] of rutas) {
+        const opciones = {
+            method: metodo,
+            headers: { 'content-type': 'application/json' }
+        };
+
+        // GET no admite cuerpo, los demás métodos sí.
+        if (metodo !== 'GET') {
+            opciones.body = JSON.stringify({});
+        }
+
+        const { estado, cuerpo } = await pedir(ruta, opciones);
+
+        assert.equal(estado, 401, `${metodo} ${ruta} debe responder 401`);
+        assert.equal(
+            cuerpo.message,
+            'No se proporcionó un token de autenticación.'
+        );
+    }
+});
+
+test('POST /api/mensajes valida la conexión y el contenido', async () => {
+    const vacio = await pedirConToken(
+        '/api/mensajes',
+        'POST',
+        TOKEN_USUARIO,
+        {}
+    );
+
+    assert.equal(vacio.estado, 400);
+    assert.equal(vacio.cuerpo.errors.length, 2);
+
+    const muyLargo = await pedirConToken(
+        '/api/mensajes',
+        'POST',
+        TOKEN_USUARIO,
+        { idConexion: 3, contenido: 'x'.repeat(1001) }
+    );
+
+    assert.equal(muyLargo.estado, 400);
+    assert.deepEqual(muyLargo.cuerpo.errors, [
+        'El campo contenido admite como máximo 1000 caracteres.'
+    ]);
+});
+
+test('GET /api/mensajes valida los filtros y la paginación', async () => {
+    const { estado, cuerpo } = await pedir(
+        '/api/mensajes?conexionId=abc&limit=80',
+        { headers: { authorization: `Bearer ${TOKEN_USUARIO}` } }
+    );
+
+    assert.equal(estado, 400);
+    assert.equal(cuerpo.errors.length, 2);
+    assert.ok(cuerpo.errors.some((error) => /conexionId/.test(error)));
+    assert.ok(cuerpo.errors.some((error) => /limit/.test(error)));
+});
+
+test('PATCH /api/mensajes/leidos exige la conexión', async () => {
+    const { estado, cuerpo } = await pedirConToken(
+        '/api/mensajes/leidos',
+        'PATCH',
+        TOKEN_USUARIO,
+        {}
+    );
+
+    assert.equal(estado, 400);
+    assert.deepEqual(cuerpo.errors, [
+        'El campo idConexion debe ser un entero positivo válido.'
+    ]);
+});
+
+

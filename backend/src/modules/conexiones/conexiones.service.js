@@ -2,6 +2,7 @@
 // Una conexión representa un intercambio aceptado entre dos usuarios.
 
 import * as conexionesRepository from './conexiones.repository.js';
+import * as mensajesRepository from '../mensajes/mensajes.repository.js';
 import { mapearConexionParaUsuario } from './conexiones.mapper.js';
 import { construirPaginacion } from '../../utils/consulta.js';
 
@@ -25,6 +26,17 @@ function esParticipante(fila, idUsuario) {
     );
 }
 
+// Agrega a la conexión ya mapeada cuántos mensajes esperan ser leídos por el
+// usuario, para que el cliente pueda mostrar la insignia de la conversación.
+async function agregarNoLeidos(conexion, idUsuario) {
+    const noLeidos = await mensajesRepository.contarNoLeidosDeConexion(
+        conexion.idConexion,
+        idUsuario
+    );
+
+    return { ...conexion, noLeidos };
+}
+
 // Lista las conexiones del usuario autenticado con paginación.
 export async function listarConexiones(
     idUsuario,
@@ -46,9 +58,16 @@ export async function listarConexiones(
         desplazamiento
     });
 
-    const conexiones = filas.map((fila) =>
-        mapearConexionParaUsuario(fila, idUsuario)
+    // Una sola consulta agrupada evita preguntar por cada conexión.
+    const sinLeer = await mensajesRepository.contarNoLeidos(idUsuario);
+    const mapaSinLeer = new Map(
+        sinLeer.map((fila) => [fila.id_conexion, Number(fila.total)])
     );
+
+    const conexiones = filas.map((fila) => ({
+        ...mapearConexionParaUsuario(fila, idUsuario),
+        noLeidos: mapaSinLeer.get(fila.id_conexion) ?? 0
+    }));
 
     return { conexiones, paginacion };
 }
@@ -61,7 +80,10 @@ export async function obtenerConexion(idUsuario, idConexion) {
         throw crearError(404, MENSAJE_CONEXION_NO_ENCONTRADA);
     }
 
-    return mapearConexionParaUsuario(fila, idUsuario);
+    return agregarNoLeidos(
+        mapearConexionParaUsuario(fila, idUsuario),
+        idUsuario
+    );
 }
 
 // Finaliza una conexión activa. Cualquiera de los dos participantes puede
@@ -89,5 +111,8 @@ export async function finalizarConexion(idUsuario, idConexion) {
 
     const conexion = await conexionesRepository.findById(idConexion);
 
-    return mapearConexionParaUsuario(conexion, idUsuario);
+    return agregarNoLeidos(
+        mapearConexionParaUsuario(conexion, idUsuario),
+        idUsuario
+    );
 }

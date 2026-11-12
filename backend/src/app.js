@@ -8,6 +8,7 @@ import usuariosRoutes from './modules/usuarios/usuarios.routes.js';
 import habilidadesUsuarioRoutes from './modules/habilidades-usuario/habilidades-usuario.routes.js';
 import solicitudesRoutes from './modules/solicitudes/solicitudes.routes.js';
 import conexionesRoutes from './modules/conexiones/conexiones.routes.js';
+import mensajesRoutes from './modules/mensajes/mensajes.routes.js';
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/habilidades-usuario', habilidadesUsuarioRoutes);
 app.use('/api/solicitudes', solicitudesRoutes);
 app.use('/api/conexiones', conexionesRoutes);
+app.use('/api/mensajes', mensajesRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -2,7 +2,7 @@
 
 SkillMatch es una plataforma web orientada al intercambio no monetario de conocimientos y habilidades. Permite que las personas publiquen habilidades que pueden enseñar, registren habilidades que desean aprender, busquen coincidencias, envíen solicitudes de conexión, se comuniquen y califiquen las experiencias de intercambio.
 
-Actualmente, el proyecto implementa en el backend los módulos de gestión de categorías, gestión de habilidades, autenticación, usuarios, habilidades del usuario, solicitudes de conexión y conexiones. Estos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento, las habilidades asociadas a cada categoría, el registro de usuarios, el inicio de sesión, la consulta o actualización del perfil del usuario autenticado, las habilidades que cada persona ofrece o desea aprender, la búsqueda de personas y el envío, aceptación, rechazo o cancelación de solicitudes de conexión entre usuarios.
+Actualmente, el proyecto implementa en el backend los módulos de gestión de categorías, gestión de habilidades, autenticación, usuarios, habilidades del usuario, solicitudes de conexión, conexiones y mensajería. Estos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento, las habilidades asociadas a cada categoría, el registro de usuarios, el inicio de sesión, la consulta o actualización del perfil del usuario autenticado, las habilidades que cada persona ofrece o desea aprender, la búsqueda de personas, el envío, aceptación, rechazo o cancelación de solicitudes de conexión entre usuarios y la conversación privada entre los participantes de una conexión aceptada.
 
 ## Tecnologías utilizadas
 
@@ -725,6 +725,67 @@ Content-Type: application/json
 
 Cuando el receptor acepta con `PATCH /api/solicitudes/15/aceptar`, la respuesta incluye la solicitud actualizada y la conexión creada en `data.conexion` con el estado `activa`.
 
+### Mensajería de las conexiones
+
+Cada conexión aceptada funciona como una conversación privada entre los dos participantes. El módulo permite enviar mensajes, consultar el historial, marcar como leídos los mensajes recibidos y saber cuántos mensajes esperan respuesta.
+
+Reglas de negocio:
+
+- Solo los dos participantes de la conexión pueden leer y escribir en ella; cualquier otro usuario recibe `404` para no revelar que la conversación existe.
+- Solo se pueden enviar mensajes mientras la conexión esté `activa`; si está `finalizada` o `bloqueada` la respuesta es `409`. El historial se puede seguir consultando.
+- El contenido es obligatorio, se guarda recortado y admite hasta 1000 caracteres (`400` si está vacío o excede el límite).
+- La marca de leído solo afecta a los mensajes recibidos: los propios nunca se marcan.
+- Cada mensaje incluye `esPropio` para que el cliente alinee la burbuja sin comparar identificadores.
+
+### Endpoints de mensajería
+
+| Método  | Ruta                      | Protegido | Descripción                                              |
+| ------- | ------------------------- | --------- | -------------------------------------------------------- |
+| `POST`  | `/api/mensajes`           | Sí        | Envía un mensaje a una conexión activa                   |
+| `GET`   | `/api/mensajes`           | Sí        | Lista los mensajes del usuario con filtros y paginación  |
+| `PATCH` | `/api/mensajes/leidos`    | Sí        | Marca como leídos los mensajes recibidos en una conexión |
+| `GET`   | `/api/mensajes/no-leidos` | Sí        | Resume los mensajes sin leer por conexión                |
+
+El listado acepta `conexionId`, `page` y `limit`, y devuelve los mensajes en orden cronológico ascendente junto con su `paginacion`. Sin `conexionId` se listan los mensajes de todas las conexiones del usuario. Las respuestas de `/api/conexiones` incluyen el campo `noLeidos` con los mensajes recibidos que todavía no se leyeron.
+
+**Petición:**
+
+```http
+POST /api/mensajes
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "idConexion": 7,
+  "contenido": "Hola, ¿nos vemos el sábado para practicar?"
+}
+```
+
+**Respuesta `201 Created`:**
+
+```json
+{
+  "success": true,
+  "message": "Mensaje enviado correctamente.",
+  "data": {
+    "idMensaje": 31,
+    "idConexion": 7,
+    "remitente": {
+      "idUsuario": 4,
+      "nombres": "Ana",
+      "apellidos": "Gómez",
+      "alias": "anag"
+    },
+    "contenido": "Hola, ¿nos vemos el sábado para practicar?",
+    "leido": false,
+    "fechaEnvio": "2026-11-12T15:30:00.000Z",
+    "esPropio": true
+  }
+}
+```
+
 
 Además de las variables de conexión a la base de datos, el backend utiliza las siguientes variables:
 
@@ -788,11 +849,11 @@ Qué cubre la suite:
 - Validación de la configuración del entorno (`tests/config/env.test.js`): variables obligatorias, puertos, `JWT_SECRET` y `JWT_EXPIRES_IN`, mensajes de error agregados y advertencias.
 - Autenticación (`tests/middlewares/autenticacion.test.js`): formato del encabezado `Authorization`, tokens válidos, expirados, firmados con otro secreto o sin firma, y autorización de administrador.
 - Manejo de errores (`tests/middlewares/errorHandler.test.js`) y rutas inexistentes (`tests/middlewares/notFound.test.js`).
-- Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores. Las solicitudes de conexión (`tests/modules/solicitudes.validation.test.js`) y las conexiones (`tests/modules/conexiones.validation.test.js`) cubren el receptor, el mensaje inicial, los filtros de estado y los identificadores.
+- Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores. Las solicitudes de conexión (`tests/modules/solicitudes.validation.test.js`), las conexiones (`tests/modules/conexiones.validation.test.js`) y la mensajería (`tests/modules/mensajes.validation.test.js`) cubren el receptor, el mensaje inicial, el contenido de los mensajes, los filtros de estado y los identificadores.
 - Utilidades de listados (`tests/utils/consulta.test.js`): valores por defecto de `page` y `limit`, metadatos de paginación y validación de filtros de texto, identificadores y valores cerrados (`estado`, `orden`).
-- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`), el 401 de las ocho rutas de habilidades del usuario y el 401 de las diez rutas de solicitudes y conexiones.
+- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`, `conexionId`), el 401 de las ocho rutas de habilidades del usuario, el 401 de las diez rutas de solicitudes y conexiones y el 401 de las cuatro rutas de mensajería.
 
-La suite completa suma 143 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
+La suite completa suma 157 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
 
 El archivo `tests/entorno-pruebas.js` define variables de entorno mínimas para que las pruebas puedan cargar la configuración sin depender de un `.env` específico.
 
