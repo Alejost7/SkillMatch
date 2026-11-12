@@ -71,6 +71,40 @@ function validarExpiracion(origen, errores) {
 }
 
 /**
+ * Interpreta DB_SSL.
+ *
+ * Se aceptan tres estados porque los proveedores gestionados no se comportan
+ * igual:
+ *   - vacío / false           -> sin TLS (MySQL local de desarrollo).
+ *   - true / required         -> TLS sin validar el certificado. Es lo que
+ *                               necesita Railway: su MySQL usa un certificado
+ *                               autofirmado y no publica la CA.
+ *   - verify / strict         -> TLS validando el certificado (sólo si la CA
+ *                               está en el almacén de confianza de Node).
+ */
+function validarSsl(origen, errores) {
+    const texto = leerVariable(origen, 'DB_SSL').toLowerCase();
+
+    if (!texto || texto === 'false' || texto === 'disabled') {
+        return null;
+    }
+
+    if (texto === 'true' || texto === 'required' || texto === 'require') {
+        return { rejectUnauthorized: false };
+    }
+
+    if (texto === 'verify' || texto === 'strict') {
+        return { rejectUnauthorized: true };
+    }
+
+    errores.push(
+        'La variable DB_SSL debe ser true, false, required o verify.'
+    );
+
+    return null;
+}
+
+/**
  * Valida un objeto de variables (por defecto process.env) y devuelve la
  * configuración tipada del backend.
  *
@@ -105,14 +139,28 @@ export function cargarConfig(origen = process.env) {
         );
     }
 
+    const ssl = validarSsl(origen, errores);
+
+    // En producción, hablar con MySQL sin TLS es casi siempre un error de
+    // configuración: los MySQL gestionados (Railway incluido) lo exigen.
+    if (origen.NODE_ENV === 'production' && !ssl) {
+        advertencias.push(
+            'DB_SSL está desactivado con NODE_ENV=production; la mayoría de los MySQL gestionados exigen TLS.'
+        );
+    }
+
     const configuracion = {
+        // 0.0.0.0 es necesario dentro de un contenedor: con 127.0.0.1 el proxy
+        // de la plataforma no alcanza el proceso.
+        host: leerVariable(origen, 'HOST') || '0.0.0.0',
         port: validarPuerto(origen, 'PORT', '3000', errores),
         database: {
             host: valores.DB_HOST,
             port: validarPuerto(origen, 'DB_PORT', '3306', errores),
             name: valores.DB_NAME,
             user: valores.DB_USER,
-            password: valores.DB_PASSWORD
+            password: valores.DB_PASSWORD,
+            ssl
         },
         jwt: {
             secret: valores.JWT_SECRET,

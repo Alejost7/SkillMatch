@@ -1,5 +1,8 @@
 import { useState } from 'react';
 
+import CampoArea from '../../../components/CampoArea.jsx';
+import CampoSelect from '../../../components/CampoSelect.jsx';
+import CampoTexto from '../../../components/CampoTexto.jsx';
 import { validarCategoria } from '../categorias.validation.js';
 
 const valoresIniciales = {
@@ -8,38 +11,39 @@ const valoresIniciales = {
     estado: 'activo'
 };
 
-const estiloCampo =
-    'mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+const OPCIONES_ESTADO = [
+    { valor: 'activo', etiqueta: 'Activo' },
+    { valor: 'inactivo', etiqueta: 'Inactivo' }
+];
 
-export default function CategoriaForm({ onSave, guardando, categoria = null, onCancel }) {
+export default function CategoriaForm({
+    onSave,
+    guardando,
+    categoria = null,
+    onCancel
+}) {
     const editando = categoria !== null;
+
     const [datos, setDatos] = useState(() => ({
-    nombre: categoria?.nombre ?? '',
-    descripcion: categoria?.descripcion ?? '',
-    estado: categoria?.estado ?? 'activo'
+        nombre: categoria?.nombre ?? '',
+        descripcion: categoria?.descripcion ?? '',
+        estado: categoria?.estado ?? 'activo'
     }));
-    
+
     const [errores, setErrores] = useState({});
 
-    function cambiarCampo(event) {
-        const { name, value } = event.target;
+    function cambiarCampo(evento) {
+        const { name, value } = evento.target;
 
-        setDatos((actuales) => ({
-        ...actuales,
-        [name]: value
-        }));
-
-        setErrores((actuales) => ({
-        ...actuales,
-        [name]: ''
-        }));
+        setDatos((actuales) => ({ ...actuales, [name]: value }));
+        setErrores((actuales) => ({ ...actuales, [name]: '' }));
     }
 
-    async function enviarFormulario(event) {
-        event.preventDefault();
+    async function enviarFormulario(evento) {
+        evento.preventDefault();
 
         if (guardando) {
-        return;
+            return;
         }
 
         const nuevosErrores = validarCategoria(datos);
@@ -47,18 +51,18 @@ export default function CategoriaForm({ onSave, guardando, categoria = null, onC
         setErrores(nuevosErrores);
 
         if (Object.keys(nuevosErrores).length > 0) {
-        return;
+            return;
         }
 
         const guardada = await onSave({
-        nombre: datos.nombre.trim(),
-        descripcion: datos.descripcion.trim() || null,
-        estado: datos.estado
+            nombre: datos.nombre.trim(),
+            descripcion: datos.descripcion.trim() || null,
+            estado: datos.estado
         });
 
         if (guardada) {
-        setDatos({ ...valoresIniciales });
-        setErrores({});
+            setDatos({ ...valoresIniciales });
+            setErrores({});
         }
     }
 
@@ -68,143 +72,78 @@ export default function CategoriaForm({ onSave, guardando, categoria = null, onC
     }
 
     return (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">
-            {editando ? 'Editar categoría' : 'Nueva categoría'}
-        </h2>
+        <section className="rounded-2xl border border-slate-800 bg-surface p-6">
+            <h2 className="text-lg font-semibold text-text-main">
+                {editando ? 'Editar categoría' : 'Nueva categoría'}
+            </h2>
 
-        <p className="mt-1 text-sm text-slate-500">
-            {editando ? 'Edita los datos de la categoría.' : 'Registra un área de conocimiento para SkillMatch.'}
-        </p>
+            <p className="mt-1 text-sm text-text-muted">
+                {editando
+                    ? 'Edita los datos de la categoría seleccionada.'
+                    : 'Registra un área de conocimiento para SkillMatch.'}
+            </p>
 
-        <form
-            onSubmit={enviarFormulario}
-            noValidate
-            className="mt-5"
-        >
-            <fieldset disabled={guardando} className="space-y-5">
-            <div>
-                <label
-                htmlFor="categoria-nombre"
-                className="text-sm font-medium text-slate-700"
-                >
-                Nombre *
-                </label>
+            <form onSubmit={enviarFormulario} noValidate className="mt-5">
+                <fieldset disabled={guardando} className="space-y-4">
+                    <CampoTexto
+                        id="categoria-nombre"
+                        name="nombre"
+                        label="Nombre *"
+                        value={datos.nombre}
+                        onChange={cambiarCampo}
+                        error={errores.nombre}
+                        ayuda="Máximo 80 caracteres."
+                        maxLength={80}
+                        placeholder="Por ejemplo: Fotografía"
+                        required
+                    />
 
-                <input
-                id="categoria-nombre"
-                name="nombre"
-                type="text"
-                value={datos.nombre}
-                onChange={cambiarCampo}
-                placeholder="Por ejemplo: Fotografía"
-                required
-                aria-invalid={Boolean(errores.nombre)}
-                aria-describedby="categoria-nombre-ayuda categoria-nombre-error"
-                className={estiloCampo}
-                />
+                    <CampoArea
+                        id="categoria-descripcion"
+                        name="descripcion"
+                        label="Descripción"
+                        value={datos.descripcion}
+                        onChange={cambiarCampo}
+                        error={errores.descripcion}
+                        ayuda="Opcional. Máximo 255 caracteres."
+                        maximo={255}
+                        maxLength={255}
+                        rows={4}
+                        placeholder="Describe qué conocimientos agrupa."
+                    />
 
-                <p
-                id="categoria-nombre-ayuda"
-                className="mt-1 text-xs text-slate-500"
-                >
-                Máximo 80 caracteres. Actual: {[...datos.nombre].length}.
-                </p>
+                    <CampoSelect
+                        id="categoria-estado"
+                        name="estado"
+                        label="Estado"
+                        value={datos.estado}
+                        onChange={cambiarCampo}
+                        error={errores.estado}
+                        opciones={OPCIONES_ESTADO}
+                    />
 
-                <p
-                id="categoria-nombre-error"
-                className="mt-1 text-sm text-red-600"
-                aria-live="polite"
-                >
-                {errores.nombre}
-                </p>
-            </div>
+                    <div className="flex flex-wrap gap-3">
+                        <button
+                            type="submit"
+                            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {guardando
+                                ? 'Guardando…'
+                                : editando
+                                  ? 'Guardar cambios'
+                                  : 'Crear categoría'}
+                        </button>
 
-            <div>
-                <label
-                htmlFor="categoria-descripcion"
-                className="text-sm font-medium text-slate-700"
-                >
-                Descripción
-                </label>
-
-                <textarea
-                id="categoria-descripcion"
-                name="descripcion"
-                rows={4}
-                value={datos.descripcion}
-                onChange={cambiarCampo}
-                placeholder="Describe qué conocimientos agrupa."
-                aria-invalid={Boolean(errores.descripcion)}
-                aria-describedby="categoria-descripcion-ayuda categoria-descripcion-error"
-                className={estiloCampo}
-                />
-
-                <p
-                id="categoria-descripcion-ayuda"
-                className="mt-1 text-xs text-slate-500"
-                >
-                Opcional. Máximo 255 caracteres.
-                {' '}Actual: {[...datos.descripcion].length}.
-                </p>
-
-                <p
-                id="categoria-descripcion-error"
-                className="mt-1 text-sm text-red-600"
-                aria-live="polite"
-                >
-                {errores.descripcion}
-                </p>
-            </div>
-
-            <div>
-                <label
-                htmlFor="categoria-estado"
-                className="text-sm font-medium text-slate-700"
-                >
-                Estado
-                </label>
-
-                <select
-                id="categoria-estado"
-                name="estado"
-                value={datos.estado}
-                onChange={cambiarCampo}
-                aria-invalid={Boolean(errores.estado)}
-                aria-describedby="categoria-estado-error"
-                className={estiloCampo}
-                >
-                <option value="activo">Activo</option>
-                <option value="inactivo">Inactivo</option>
-                </select>
-
-                <p
-                id="categoria-estado-error"
-                className="mt-1 text-sm text-red-600"
-                aria-live="polite"
-                >
-                {errores.estado}
-                </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-                <button
-                type="submit"
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                {guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear categoría'}
-                </button>
-
-                <button
-                type="button"
-                onClick={editando ? onCancel : limpiarFormulario}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                {editando ? 'Cancelar edición' : 'Limpiar'}
-                </button>
-            </div>
-            </fieldset>
-        </form>
+                        <button
+                            type="button"
+                            onClick={editando ? onCancel : limpiarFormulario}
+                            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-text-main transition hover:bg-slate-800 disabled:opacity-60"
+                        >
+                            {editando ? 'Cancelar edición' : 'Limpiar'}
+                        </button>
+                    </div>
+                </fieldset>
+            </form>
         </section>
     );
 }

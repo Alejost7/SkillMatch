@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 
 import AlertMessage from '../../components/AlertMessage.jsx';
 import ConfirmDialog from '../../components/ConfirmDialog.jsx';
+import Cargando from '../../components/Cargando.jsx';
+import { mensajeDeError } from '../../utils/errores.js';
 
 import CategoriaForm from './components/CategoriaForm.jsx';
 import CategoriasTable from './components/CategoriasTable.jsx';
@@ -13,14 +15,7 @@ import {
     eliminarCategoria
 } from './categorias.api.js';
 
-function obtenerMensajeError(error) {
-    if (error instanceof TypeError) {
-        return 'No fue posible conectar con el servidor.';
-    }
-
-    return error.message || 'Ocurrió un error inesperado.';
-}
-
+// El backend devuelve las categorías en snake_case (id_categoria, ...).
 function ordenarCategorias(categorias) {
     return [...categorias].sort((a, b) =>
         a.nombre.localeCompare(b.nombre, 'es')
@@ -47,23 +42,23 @@ export default function CategoriasPage() {
         const controller = new AbortController();
 
         async function cargarCategorias() {
-        try {
-            const datos = await listarCategorias({
-            signal: controller.signal
-            });
+            try {
+                const datos = await listarCategorias({
+                    signal: controller.signal
+                });
 
-            if (!controller.signal.aborted) {
-            setCategorias(ordenarCategorias(datos));
+                if (!controller.signal.aborted) {
+                    setCategorias(ordenarCategorias(datos));
+                }
+            } catch (error) {
+                if (!controller.signal.aborted) {
+                    setErrorCarga(mensajeDeError(error));
+                }
+            } finally {
+                if (!controller.signal.aborted) {
+                    setCargando(false);
+                }
             }
-        } catch (error) {
-            if (!controller.signal.aborted) {
-            setErrorCarga(obtenerMensajeError(error));
-            }
-        } finally {
-            if (!controller.signal.aborted) {
-            setCargando(false);
-            }
-        }
         }
 
         cargarCategorias();
@@ -100,53 +95,51 @@ export default function CategoriasPage() {
         const idEditando = categoriaEditando?.id_categoria;
 
         try {
-        const categoria = idEditando
-            ? await actualizarCategoria(idEditando, datos)
-            : await crearCategoria(datos);
+            const categoria = idEditando
+                ? await actualizarCategoria(idEditando, datos)
+                : await crearCategoria(datos);
 
-        setCategorias((actuales) => {
-            const nuevas = idEditando
-            ? actuales.map((actual) =>
-                actual.id_categoria === idEditando
-                    ? categoria
-                    : actual
-                )
-            : [...actuales, categoria];
+            setCategorias((actuales) => {
+                const nuevas = idEditando
+                    ? actuales.map((actual) =>
+                          actual.id_categoria === idEditando
+                              ? categoria
+                              : actual
+                      )
+                    : [...actuales, categoria];
 
-            return ordenarCategorias(nuevas);
-        });
+                return ordenarCategorias(nuevas);
+            });
 
-        setMensaje({
-            type: 'success',
-            text: idEditando
-            ? 'Categoría actualizada correctamente.'
-            : 'Categoría creada correctamente.',
-            details: []
-        });
-
-        if (idEditando) {
             reiniciarFormulario();
-        }
 
-        return true;
+            setMensaje({
+                type: 'success',
+                text: idEditando
+                    ? 'Categoría actualizada correctamente.'
+                    : 'Categoría creada correctamente.',
+                details: []
+            });
+
+            return true;
         } catch (error) {
-        setMensaje({
-            type: 'error',
-            text: obtenerMensajeError(error),
-            details: Array.isArray(error.errors) ? error.errors : []
-        });
+            setMensaje({
+                type: 'error',
+                text: mensajeDeError(error),
+                details: error.errors ?? []
+            });
 
-        return false;
+            return false;
         } finally {
-        setGuardando(false);
+            setGuardando(false);
         }
     }
 
     function solicitarEliminacion(categoria) {
         if (ocupado) return;
 
-        setMensaje(null);
         setErrorEliminar('');
+        setMensaje(null);
         setCategoriaEliminar(categoria);
     }
 
@@ -158,7 +151,7 @@ export default function CategoriasPage() {
     }
 
     async function confirmarEliminacion() {
-        if (!categoriaEliminar || ocupado) return;
+        if (!categoriaEliminar || eliminando) return;
 
         const id = categoriaEliminar.id_categoria;
 
@@ -166,109 +159,110 @@ export default function CategoriasPage() {
         setErrorEliminar('');
 
         try {
-        await eliminarCategoria(id);
+            await eliminarCategoria(id);
 
-        setCategorias((actuales) =>
-            actuales.filter((categoria) => categoria.id_categoria !== id)
-        );
+            setCategorias((actuales) =>
+                actuales.filter((categoria) => categoria.id_categoria !== id)
+            );
 
-        if (categoriaEditando?.id_categoria === id) {
-            reiniciarFormulario();
-        }
+            if (categoriaEditando?.id_categoria === id) {
+                reiniciarFormulario();
+            }
 
-        setCategoriaEliminar(null);
+            setCategoriaEliminar(null);
 
-        setMensaje({
-            type: 'success',
-            text: 'Categoría eliminada correctamente.',
-            details: []
-        });
+            setMensaje({
+                type: 'success',
+                text: 'Categoría eliminada correctamente.',
+                details: []
+            });
         } catch (error) {
-        setErrorEliminar(obtenerMensajeError(error));
+            setErrorEliminar(mensajeDeError(error));
         } finally {
-        setEliminando(false);
+            setEliminando(false);
         }
     }
 
     return (
         <section>
-        <div className="mb-6">
-            <p className="text-sm font-medium text-indigo-600">
-            Catálogo de conocimientos
-            </p>
-
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-            Categorías
-            </h1>
-
-            <p className="mt-2 text-slate-600">
-            Administra las áreas que organizan las habilidades de SkillMatch.
-            </p>
-        </div>
-
-        {cargando ? (
-            <div
-            role="status"
-            className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500"
-            >
-            Cargando categorías…
-            </div>
-        ) : errorCarga ? (
-            <AlertMessage>{errorCarga}</AlertMessage>
-        ) : (
-            <>
-            {mensaje && (
-                <div className="mb-6">
-                <AlertMessage type={mensaje.type}>
-                    <p>{mensaje.text}</p>
-
-                    {mensaje.details.length > 0 && (
-                    <ul className="mt-2 list-disc pl-5">
-                        {mensaje.details.map((detalle, index) => (
-                        <li key={index}>{detalle}</li>
-                        ))}
-                    </ul>
-                    )}
-                </AlertMessage>
-                </div>
-            )}
-
-            <div className="grid items-start gap-6 lg:grid-cols-3">
-                <div>
-                <CategoriaForm
-                    key={versionFormulario}
-                    categoria={categoriaEditando}
-                    onSave={guardarCategoria}
-                    onCancel={cancelarEdicion}
-                    guardando={ocupado}
-                />
-                </div>
-
-                <div className="min-w-0 lg:col-span-2">
-                <p className="mb-3 text-sm text-slate-500">
-                    Total de categorías: {categorias.length}
+            <div className="mb-6">
+                <p className="text-sm font-medium text-primary">
+                    Catálogo de conocimientos
                 </p>
 
-                <CategoriasTable
-                    categorias={categorias}
-                    onEdit={iniciarEdicion}
-                    onDelete={solicitarEliminacion}
-                    ocupado={ocupado}
-                />
-                </div>
+                <h1 className="mt-2 text-3xl font-bold tracking-tight text-text-main">
+                    Categorías
+                </h1>
+
+                <p className="mt-2 text-text-muted">
+                    Administra las áreas que organizan las habilidades de
+                    SkillMatch.
+                </p>
             </div>
 
-            {categoriaEliminar && (
-                <ConfirmDialog
-                nombre={categoriaEliminar.nombre}
-                ocupado={eliminando}
-                error={errorEliminar}
-                onCancel={cancelarEliminacion}
-                onConfirm={confirmarEliminacion}
-                />
+            {cargando ? (
+                <Cargando mensaje="Cargando categorías…" />
+            ) : errorCarga ? (
+                <AlertMessage>{errorCarga}</AlertMessage>
+            ) : (
+                <>
+                    {mensaje && (
+                        <div className="mb-6">
+                            <AlertMessage type={mensaje.type}>
+                                <p>{mensaje.text}</p>
+
+                                {mensaje.details.length > 0 && (
+                                    <ul className="mt-2 list-disc pl-5">
+                                        {mensaje.details.map(
+                                            (detalle, indice) => (
+                                                <li key={indice}>{detalle}</li>
+                                            )
+                                        )}
+                                    </ul>
+                                )}
+                            </AlertMessage>
+                        </div>
+                    )}
+
+                    <div className="grid items-start gap-6 lg:grid-cols-3">
+                        <div>
+                            <CategoriaForm
+                                key={versionFormulario}
+                                categoria={categoriaEditando}
+                                onSave={guardarCategoria}
+                                onCancel={cancelarEdicion}
+                                guardando={ocupado}
+                            />
+                        </div>
+
+                        <div className="min-w-0 lg:col-span-2">
+                            <p className="mb-3 text-sm text-text-muted">
+                                Total de categorías: {categorias.length}
+                            </p>
+
+                            <CategoriasTable
+                                categorias={categorias}
+                                onEdit={iniciarEdicion}
+                                onDelete={solicitarEliminacion}
+                                ocupado={ocupado}
+                            />
+                        </div>
+                    </div>
+
+                    {categoriaEliminar && (
+                        <ConfirmDialog
+                            titulo="Eliminar categoría"
+                            descripcion={`¿Deseas eliminar la categoría «${categoriaEliminar.nombre}»? Esta acción no se puede deshacer.`}
+                            textoConfirmar="Sí, eliminar"
+                            textoOcupado="Eliminando…"
+                            ocupado={eliminando}
+                            error={errorEliminar}
+                            onCancel={cancelarEliminacion}
+                            onConfirm={confirmarEliminacion}
+                        />
+                    )}
+                </>
             )}
-            </>
-        )}
         </section>
     );
 }

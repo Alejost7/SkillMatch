@@ -4,17 +4,21 @@
 import { Router } from 'express';
 
 import { abrirEventos, obtenerFeed } from './eventos.controller.js';
-import { autenticarEvento } from '../../middlewares/autenticacion.js';
+import {
+    autenticar,
+    autenticarEvento
+} from '../../middlewares/autenticacion.js';
 
 const router = Router();
 
-// Todas las rutas del módulo son privadas.
-router.use(autenticarEvento);
-
 // GET /api/eventos/feed
-router.get('/feed', obtenerFeed);
+// Es una consulta REST normal: el cliente la hace con apiClient, que envía el
+// token en el header Authorization.
+router.get('/feed', autenticar, obtenerFeed);
 
 // GET /api/eventos?token=<jwt>
-router.get('/', abrirEventos);
+// EventSource no permite headers, así que aquí sí se lee el token de la query.
+router.get('/', autenticarEvento, abrirEventos);
 
 export default router;
+

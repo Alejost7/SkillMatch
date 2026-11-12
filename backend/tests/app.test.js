@@ -98,6 +98,37 @@ test('una ruta inexistente responde 404', async () => {
     assert.match(cuerpo.message, /la ruta solicitada no existe/);
 });
 
+test('sirve la SPA compilada y conserva el 404 en JSON para la API', async (t) => {
+    const { existsSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+
+    const indexHtml = fileURLToPath(
+        new URL('../../frontend/dist/index.html', import.meta.url)
+    );
+
+    if (!existsSync(indexHtml)) {
+        t.skip('frontend/dist no está compilado en esta máquina');
+        return;
+    }
+
+    // Navegación del navegador: recibe index.html para que React Router resuelva.
+    const spa = await fetch(`${urlBase}/politica-datos`, {
+        headers: { accept: 'text/html,application/xhtml+xml' }
+    });
+
+    assert.equal(spa.status, 200);
+    assert.match(spa.headers.get('content-type'), /text\/html/);
+    assert.equal(spa.headers.get('cache-control'), 'no-cache');
+    assert.match(await spa.text(), /<div id="root">/);
+
+    // Un cliente que no pide HTML (curl, tests, herramientas) sigue viendo el
+    // 404 en JSON: el fallback no tapa los errores de rutas inexistentes.
+    const sinHtml = await pedir('/politica-datos');
+
+    assert.equal(sinHtml.estado, 404);
+    assert.equal(sinHtml.cuerpo.success, false);
+});
+
 test('GET /api/usuarios/perfil responde 401 sin token', async () => {
     const { estado, cuerpo } = await pedir('/api/usuarios/perfil');
 
@@ -775,13 +806,26 @@ test('GET /api/eventos ignora un token repetido en la query', async () => {
     );
 });
 
-test('GET /api/eventos/feed responde 401 con un token inválido', async () => {
-    const { estado, cuerpo } = await pedir(
-        '/api/eventos/feed?token=token-invalido'
+test('GET /api/eventos/feed se autentica por header, no por query', async () => {
+    // El feed es una consulta REST que hace apiClient, así que el token viaja en
+    // el header Authorization. Un token en la query ya no se acepta aquí: eso es
+    // exclusivo del flujo SSE, que no puede enviar headers.
+    const porQuery = await pedir(
+        `/api/eventos/feed?token=${TOKEN_USUARIO}`
     );
 
-    assert.equal(estado, 401);
-    assert.equal(cuerpo.message, 'Token inválido o expirado.');
+    assert.equal(porQuery.estado, 401);
+    assert.equal(
+        porQuery.cuerpo.message,
+        'No se proporcionó un token de autenticación.'
+    );
+
+    const invalido = await pedir('/api/eventos/feed', {
+        headers: { authorization: 'Bearer token-invalido' }
+    });
+
+    assert.equal(invalido.estado, 401);
+    assert.equal(invalido.cuerpo.message, 'Token inválido o expirado.');
 });
 
 test('GET /api/mensajes valida el parámetro desde', async () => {

@@ -1,0 +1,22 @@
+# Contexto de build reducido: nada de esto debe viajar a la imagen.
+
+# Dependencias y artefactos de compilación (se generan dentro del Dockerfile).
+**/node_modules
+**/dist
+
+# Control de versiones y configuración del editor.
+.git
+.gitignore
+.vscode
+.idea
+
+# Secretos locales: en Railway las variables llegan por el entorno del servicio.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Documentación y archivos auxiliares que no afectan a la ejecución.
+Documentation
+README.md
+*.log
+*.TXT

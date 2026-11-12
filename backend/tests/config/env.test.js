@@ -211,3 +211,83 @@ test('agrupa todos los errores en un único mensaje', () => {
     assert.match(mensaje, /DB_USER/);
     assert.match(mensaje, /JWT_SECRET/);
 });
+
+// ---------------------------------------------------------------------------
+// Interfaz de escucha (despliegue en contenedor)
+// ---------------------------------------------------------------------------
+
+test('escucha en 0.0.0.0 cuando HOST no está definido', () => {
+    const config = cargarConfig(configurar());
+
+    assert.equal(config.host, '0.0.0.0');
+});
+
+test('respeta HOST cuando se define explícitamente', () => {
+    const config = cargarConfig(configurar({ HOST: '  127.0.0.1  ' }));
+
+    assert.equal(config.host, '127.0.0.1');
+});
+
+// ---------------------------------------------------------------------------
+// DB_SSL: TLS hacia MySQL (lo exige Railway)
+// ---------------------------------------------------------------------------
+
+test('sin DB_SSL no se activa TLS', () => {
+    const config = cargarConfig(configurar());
+
+    assert.equal(config.database.ssl, null);
+});
+
+test('DB_SSL=false o disabled desactiva TLS', () => {
+    for (const valor of ['false', 'FALSE', 'disabled', '   ']) {
+        const config = cargarConfig(configurar({ DB_SSL: valor }));
+
+        assert.equal(config.database.ssl, null, `DB_SSL=${valor}`);
+    }
+});
+
+test('DB_SSL=true habilita TLS sin validar el certificado', () => {
+    for (const valor of ['true', 'TRUE', 'required', 'require', ' true ']) {
+        const config = cargarConfig(configurar({ DB_SSL: valor }));
+
+        assert.deepEqual(
+            config.database.ssl,
+            { rejectUnauthorized: false },
+            `DB_SSL=${valor}`
+        );
+    }
+});
+
+test('DB_SSL=verify habilita TLS validando el certificado', () => {
+    for (const valor of ['verify', 'strict']) {
+        const config = cargarConfig(configurar({ DB_SSL: valor }));
+
+        assert.deepEqual(
+            config.database.ssl,
+            { rejectUnauthorized: true },
+            `DB_SSL=${valor}`
+        );
+    }
+});
+
+test('rechaza un DB_SSL desconocido', () => {
+    const mensaje = mensajeDeError({ DB_SSL: 'quizas' });
+
+    assert.match(mensaje, /DB_SSL debe ser true, false, required o verify/);
+});
+
+test('advierte si en producción no se usa TLS', () => {
+    const config = cargarConfig(configurar({ NODE_ENV: 'production' }));
+
+    assert.equal(config.advertencias.length, 1);
+    assert.match(config.advertencias[0], /DB_SSL está desactivado/);
+});
+
+test('no advierte por TLS en producción si DB_SSL está activo', () => {
+    const config = cargarConfig(
+        configurar({ NODE_ENV: 'production', DB_SSL: 'true' })
+    );
+
+    assert.deepEqual(config.advertencias, []);
+});
+
