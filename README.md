@@ -2,7 +2,7 @@
 
 SkillMatch es una plataforma web orientada al intercambio no monetario de conocimientos y habilidades. Permite que las personas publiquen habilidades que pueden enseñar, registren habilidades que desean aprender, busquen coincidencias, envíen solicitudes de conexión, se comuniquen y califiquen las experiencias de intercambio.
 
-Actualmente, el proyecto implementa en el backend los módulos de gestión de categorías, gestión de habilidades, autenticación, usuarios, habilidades del usuario, solicitudes de conexión, conexiones y mensajería. Estos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento, las habilidades asociadas a cada categoría, el registro de usuarios, el inicio de sesión, la consulta o actualización del perfil del usuario autenticado, las habilidades que cada persona ofrece o desea aprender, la búsqueda de personas, el envío, aceptación, rechazo o cancelación de solicitudes de conexión entre usuarios y la conversación privada entre los participantes de una conexión aceptada.
+Actualmente, el proyecto implementa en el backend los módulos de gestión de categorías, gestión de habilidades, autenticación, usuarios, habilidades del usuario, solicitudes de conexión, conexiones, mensajería y calificaciones. Estos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento, las habilidades asociadas a cada categoría, el registro de usuarios, el inicio de sesión, la consulta o actualización del perfil del usuario autenticado, las habilidades que cada persona ofrece o desea aprender, la búsqueda de personas, el envío, aceptación, rechazo o cancelación de solicitudes de conexión entre usuarios, la conversación privada entre los participantes de una conexión aceptada y la calificación mutua al finalizar el intercambio.
 
 ## Tecnologías utilizadas
 
@@ -786,6 +786,96 @@ Content-Type: application/json
 }
 ```
 
+### Calificaciones de los intercambios
+
+Cuando una conexión se finaliza, cada participante puede calificar a la otra persona una sola vez. La calificación guarda una puntuación de 1 a 5 y un comentario opcional de hasta 500 caracteres.
+
+Reglas de negocio:
+
+- Solo se califica un intercambio `finalizada`; si la conexión sigue `activa` o está `bloqueada` la respuesta es `409`.
+- El calificado no se envía desde el cliente: el backend lo deduce de la conexión, así que nunca se puede calificar a alguien con quien no hubo intercambio.
+- Cada participante califica una sola vez por conexión (`409` si ya lo hizo); la clave única de la tabla respalda la regla ante envíos simultáneos.
+- Calificar o consultar las calificaciones de una conexión ajena devuelve `404`.
+- El resumen incluye `total`, `promedio` (dos decimales) y `distribucion` por puntuación. El promedio también aparece como `calificacion` en `GET /api/usuarios/:id` y `GET /api/usuarios/perfil`.
+
+### Endpoints de calificaciones
+
+| Método | Ruta                             | Protegido | Descripción                                                         |
+| ------ | -------------------------------- | --------- | ------------------------------------------------------------------- |
+| `POST` | `/api/calificaciones`            | Sí        | Califica a la otra persona de un intercambio finalizado             |
+| `GET`  | `/api/calificaciones/usuario/:id` | Sí       | Lista las calificaciones recibidas por un usuario y su resumen      |
+| `GET`  | `/api/calificaciones/conexion/:id` | Sí      | Lista las calificaciones de una conexión e indica si falta calificar |
+
+El listado por usuario acepta `page` y `limit`; el listado por conexión devuelve como máximo dos calificaciones y el campo `puedeCalificar`, que es `true` cuando el intercambio terminó y el usuario autenticado todavía no calificó.
+
+**Petición:**
+
+```http
+POST /api/calificaciones
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "idConexion": 7,
+  "puntuacion": 5,
+  "comentario": "Explicó con paciencia y llegó puntual."
+}
+```
+
+**Respuesta `201 Created`:**
+
+```json
+{
+  "success": true,
+  "message": "Calificación registrada correctamente.",
+  "data": {
+    "idCalificacion": 12,
+    "idConexion": 7,
+    "calificador": {
+      "idUsuario": 4,
+      "nombres": "Ana",
+      "apellidos": "Gómez",
+      "alias": "anag"
+    },
+    "calificado": {
+      "idUsuario": 8,
+      "nombres": "Luis",
+      "apellidos": "Pérez",
+      "alias": "luisp"
+    },
+    "puntuacion": 5,
+    "comentario": "Explicó con paciencia y llegó puntual.",
+    "fechaCalificacion": "2026-11-13T10:00:00.000Z",
+    "esPropia": true
+  }
+}
+```
+
+Al consultar las calificaciones recibidas, la respuesta agrega el resumen:
+
+```json
+{
+  "success": true,
+  "message": "Calificaciones consultadas correctamente.",
+  "data": [],
+  "resumen": {
+    "total": 2,
+    "promedio": 4.5,
+    "distribucion": { "1": 0, "2": 0, "3": 0, "4": 1, "5": 1 }
+  },
+  "paginacion": {
+    "pagina": 1,
+    "limite": 10,
+    "total": 2,
+    "totalPaginas": 1,
+    "tieneAnterior": false,
+    "tieneSiguiente": false
+  }
+}
+```
+
 
 Además de las variables de conexión a la base de datos, el backend utiliza las siguientes variables:
 
@@ -849,11 +939,11 @@ Qué cubre la suite:
 - Validación de la configuración del entorno (`tests/config/env.test.js`): variables obligatorias, puertos, `JWT_SECRET` y `JWT_EXPIRES_IN`, mensajes de error agregados y advertencias.
 - Autenticación (`tests/middlewares/autenticacion.test.js`): formato del encabezado `Authorization`, tokens válidos, expirados, firmados con otro secreto o sin firma, y autorización de administrador.
 - Manejo de errores (`tests/middlewares/errorHandler.test.js`) y rutas inexistentes (`tests/middlewares/notFound.test.js`).
-- Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores. Las solicitudes de conexión (`tests/modules/solicitudes.validation.test.js`), las conexiones (`tests/modules/conexiones.validation.test.js`) y la mensajería (`tests/modules/mensajes.validation.test.js`) cubren el receptor, el mensaje inicial, el contenido de los mensajes, los filtros de estado y los identificadores.
+- Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores. Las solicitudes de conexión (`tests/modules/solicitudes.validation.test.js`), las conexiones (`tests/modules/conexiones.validation.test.js`), la mensajería (`tests/modules/mensajes.validation.test.js`) y las calificaciones (`tests/modules/calificaciones.validation.test.js`) cubren el receptor, el mensaje inicial, el contenido de los mensajes, la puntuación, el comentario, los filtros de estado y los identificadores.
 - Utilidades de listados (`tests/utils/consulta.test.js`): valores por defecto de `page` y `limit`, metadatos de paginación y validación de filtros de texto, identificadores y valores cerrados (`estado`, `orden`).
-- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`, `conexionId`), el 401 de las ocho rutas de habilidades del usuario, el 401 de las diez rutas de solicitudes y conexiones y el 401 de las cuatro rutas de mensajería.
+- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`, `conexionId`), el 401 de las ocho rutas de habilidades del usuario, el 401 de las diez rutas de solicitudes y conexiones, el 401 de las cuatro rutas de mensajería y el 401 de las tres rutas de calificaciones.
 
-La suite completa suma 157 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
+La suite completa suma 176 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
 
 El archivo `tests/entorno-pruebas.js` define variables de entorno mínimas para que las pruebas puedan cargar la configuración sin depender de un `.env` específico.
 
@@ -941,6 +1031,25 @@ Desde Postman se pueden realizar las siguientes pruebas con dos usuarios registr
 13. Consultar una solicitud o conexión de otras personas y comprobar que responda `404`.
 14. Enviar `page=0`, `limit=100`, `estado=otro` o un `id` no numérico y comprobar que la API responda `400`.
 15. Verificar que las diez rutas respondan `401` cuando no se envía el token.
+
+## Pruebas del módulo de mensajería y calificaciones
+
+Desde Postman se pueden realizar las siguientes pruebas con dos usuarios conectados y una conexión aceptada:
+
+1. Enviar un mensaje con `POST /api/mensajes` indicando `idConexion` y `contenido`.
+2. Listar la conversación con `GET /api/mensajes?conexionId=<id>` y comprobar el orden cronológico y el campo `esPropio`.
+3. Consultar `GET /api/mensajes/no-leidos` y `GET /api/conexiones` para ver el contador `noLeidos`.
+4. Marcar los mensajes recibidos con `PATCH /api/mensajes/leidos` y comprobar que `actualizados` sea mayor que cero.
+5. Repetir la marca de lectura (debe devolver `actualizados: 0`) y enviar un mensaje a una conexión finalizada (debe responder `409`).
+6. Intentar enviar, listar o marcar mensajes con el token de un tercero y comprobar que respondan `404`.
+7. Finalizar la conexión con `PATCH /api/conexiones/:id/finalizar` antes de calificar.
+8. Calificar con `POST /api/calificaciones` indicando `idConexion`, `puntuacion` (1 a 5) y un `comentario` opcional.
+9. Repetir la calificación (debe responder `409`) y calificar mientras la conexión está activa (debe responder `409`).
+10. Consultar `GET /api/calificaciones/conexion/:id` para ver las dos calificaciones y el campo `puedeCalificar`.
+11. Consultar `GET /api/calificaciones/usuario/:id` y comprobar `resumen.promedio`, `resumen.total` y `resumen.distribucion`.
+12. Verificar que `GET /api/usuarios/:id` y `GET /api/usuarios/perfil` incluyan `calificacion` con el promedio y el total.
+13. Enviar `puntuacion` fuera de rango, `idCalificado` o `page=0` y comprobar que la API responda `400`.
+14. Verificar que las siete rutas respondan `401` cuando no se envía el token.
 
 ## Requisitos previos
 

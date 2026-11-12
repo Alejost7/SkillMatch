@@ -2,6 +2,7 @@
 
 import * as usuariosRepository from './usuarios.repository.js';
 import * as habilidadesUsuarioRepository from '../habilidades-usuario/habilidades-usuario.repository.js';
+import * as calificacionesService from '../calificaciones/calificaciones.service.js';
 import {
     agruparPorUsuario,
     habilidadesVacias,
@@ -42,6 +43,15 @@ function mapearUsuario(usuario) {
     };
 }
 
+// Resumen de calificaciones que acompaña al perfil de un usuario.
+async function obtenerResumenCalificaciones(idUsuario) {
+    const { promedio, total } = await calificacionesService.obtenerResumen(
+        idUsuario
+    );
+
+    return { promedio, total };
+}
+
 // Consulta el perfil del usuario autenticado.
 export async function obtenerPerfil(idUsuario) {
     const usuario = await usuariosRepository.findById(idUsuario);
@@ -50,7 +60,10 @@ export async function obtenerPerfil(idUsuario) {
         throw crearError(404, 'El usuario no existe.');
     }
 
-    return mapearUsuario(usuario);
+    return {
+        ...mapearUsuario(usuario),
+        calificacion: await obtenerResumenCalificaciones(idUsuario)
+    };
 }
 
 // Consulta un usuario por identificador.
@@ -62,13 +75,15 @@ export async function obtenerUsuario(idUsuario) {
         throw crearError(404, 'El usuario no existe.');
     }
 
-    const [ofrecidas, requeridas] = await Promise.all([
+    const [ofrecidas, requeridas, calificacion] = await Promise.all([
         habilidadesUsuarioRepository.findOfrecidasByUsuario(idUsuario),
-        habilidadesUsuarioRepository.findRequeridasByUsuario(idUsuario)
+        habilidadesUsuarioRepository.findRequeridasByUsuario(idUsuario),
+        obtenerResumenCalificaciones(idUsuario)
     ]);
 
     return {
         ...mapearUsuarioPublico(usuario),
+        calificacion,
         habilidades: {
             ofrecidas: ofrecidas.map(mapearOfrecida),
             requeridas: requeridas.map(mapearRequerida)

@@ -622,3 +622,105 @@ test('PATCH /api/mensajes/leidos exige la conexión', async () => {
 });
 
 
+test('las rutas de calificaciones están protegidas', async () => {
+    const rutas = [
+        ['POST', '/api/calificaciones'],
+        ['GET', '/api/calificaciones/usuario/1'],
+        ['GET', '/api/calificaciones/conexion/1']
+    ];
+
+    for (const [metodo, ruta] of rutas) {
+        const opciones = {
+            method: metodo,
+            headers: { 'content-type': 'application/json' }
+        };
+
+        // GET no admite cuerpo, los demás métodos sí.
+        if (metodo !== 'GET') {
+            opciones.body = JSON.stringify({});
+        }
+
+        const { estado, cuerpo } = await pedir(ruta, opciones);
+
+        assert.equal(estado, 401, `${metodo} ${ruta} debe responder 401`);
+        assert.equal(
+            cuerpo.message,
+            'No se proporcionó un token de autenticación.'
+        );
+    }
+});
+
+test('POST /api/calificaciones valida la conexión y la puntuación', async () => {
+    const vacio = await pedirConToken(
+        '/api/calificaciones',
+        'POST',
+        TOKEN_USUARIO,
+        {}
+    );
+
+    assert.equal(vacio.estado, 400);
+    assert.equal(vacio.cuerpo.errors.length, 2);
+
+    const fueraDeRango = await pedirConToken(
+        '/api/calificaciones',
+        'POST',
+        TOKEN_USUARIO,
+        { idConexion: 3, puntuacion: 9 }
+    );
+
+    assert.equal(fueraDeRango.estado, 400);
+    assert.deepEqual(fueraDeRango.cuerpo.errors, [
+        'El campo puntuacion debe ser un entero entre 1 y 5.'
+    ]);
+
+    // El calificado nunca se recibe del cliente.
+    const conCalificado = await pedirConToken(
+        '/api/calificaciones',
+        'POST',
+        TOKEN_USUARIO,
+        { idConexion: 3, puntuacion: 5, idCalificado: 8 }
+    );
+
+    assert.equal(conCalificado.estado, 400);
+    assert.deepEqual(conCalificado.cuerpo.errors, [
+        'Campos no permitidos: idCalificado.'
+    ]);
+});
+
+test('GET /api/calificaciones/usuario/abc responde 400 con token', async () => {
+    const { estado, cuerpo } = await pedir('/api/calificaciones/usuario/abc', {
+        headers: { authorization: `Bearer ${TOKEN_USUARIO}` }
+    });
+
+    assert.equal(estado, 400);
+    assert.equal(
+        cuerpo.message,
+        'El identificador debe ser un entero positivo válido.'
+    );
+});
+
+test('GET /api/calificaciones/conexion/0 responde 400 con token', async () => {
+    const { estado, cuerpo } = await pedir('/api/calificaciones/conexion/0', {
+        headers: { authorization: `Bearer ${TOKEN_USUARIO}` }
+    });
+
+    assert.equal(estado, 400);
+    assert.equal(
+        cuerpo.message,
+        'El identificador debe ser un entero positivo válido.'
+    );
+});
+
+test('GET /api/calificaciones/usuario/1 valida la paginación', async () => {
+    const { estado, cuerpo } = await pedir(
+        '/api/calificaciones/usuario/1?page=0&limit=99',
+        { headers: { authorization: `Bearer ${TOKEN_USUARIO}` } }
+    );
+
+    assert.equal(estado, 400);
+    assert.equal(cuerpo.errors.length, 2);
+    assert.ok(cuerpo.errors.some((error) => /page/.test(error)));
+    assert.ok(cuerpo.errors.some((error) => /limit/.test(error)));
+});
+
+

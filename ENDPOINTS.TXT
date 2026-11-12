@@ -11,6 +11,8 @@ Las solicitudes de conexión y las conexiones (secciones 6 y 7) también requier
 un usuario autenticado y solo permiten actuar sobre los registros propios.
 La mensajería (sección 8) solo permite leer y escribir en las conexiones en las
 que el usuario participa y solo envía mientras la conexión esté activa.
+Las calificaciones (sección 9) solo se crean sobre conexiones finalizadas en las
+que el usuario participó, una sola vez por participante y por conexión.
 
 =========================================================
 1. CATEGORÍAS
@@ -169,6 +171,8 @@ Protegido: Sí
 Encabezado:
 Authorization: Bearer <token>
 Respuesta exitosa: 200 OK
+Nota: incluye "calificacion" con el promedio y el total de calificaciones
+recibidas (sección 9).
 
 PUT /api/usuarios/perfil
 Descripción: Actualiza el perfil del usuario autenticado.
@@ -233,6 +237,8 @@ Descripción: Consulta la información pública de un usuario, incluidos sus
 registros en "habilidades.ofrecidas" y "habilidades.requeridas".
 Protegido: No
 Respuesta exitosa: 200 OK
+Nota: incluye "calificacion" con { promedio, total } de las calificaciones
+recibidas (sección 9).
 
 =========================================================
 5. HABILIDADES DEL USUARIO
@@ -504,3 +510,59 @@ Authorization: Bearer <token>
 Respuesta exitosa: 200 OK (data: total y porConexion)
 Nota: las rutas de conexiones (sección 7) incluyen el campo "noLeidos" con la
 misma información aplicada a cada conexión del listado.
+
+=========================================================
+9. CALIFICACIONES
+=========================================================
+Todas las rutas son privadas. Una calificación pertenece a una conexión
+finalizada y va siempre del usuario autenticado a la otra persona de la conexión.
+Valores permitidos:
+  puntuacion -> entero entre 1 y 5
+  comentario -> texto opcional de hasta 500 caracteres
+  page       -> entero entre 1 y 100000 (por defecto 1)
+  limit      -> entero entre 1 y 50 (por defecto 10)
+
+POST /api/calificaciones
+Descripción: Califica a la otra persona de un intercambio finalizado.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Cuerpo:
+{
+  "idConexion": 7,
+  "puntuacion": 5,
+  "comentario": "Explicó con paciencia y llegó puntual."
+}
+Nota: el calificado se deduce de la conexión y no se recibe del cliente.
+Si la conexión no existe o el usuario no participa responde 404.
+Si la conexión no está finalizada o ya fue calificada responde 409.
+Respuesta exitosa: 201 Created
+Campos: idCalificacion, idConexion, calificador (idUsuario, nombres, apellidos,
+alias), calificado (idUsuario, nombres, apellidos, alias), puntuacion,
+comentario, fechaCalificacion y esPropia.
+
+GET /api/calificaciones/usuario/:id
+Descripción: Lista las calificaciones recibidas por un usuario.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Parámetros opcionales: page, limit
+Ejemplo: GET /api/calificaciones/usuario/8?page=1&limit=10
+Nota: si el usuario no existe responde 404.
+Respuesta exitosa: 200 OK (data + resumen + paginacion)
+El objeto resumen contiene total, promedio (dos decimales) y distribucion
+(cantidad de calificaciones por cada puntuación de 1 a 5).
+
+GET /api/calificaciones/conexion/:id
+Descripción: Lista las calificaciones de una conexión.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Nota: si la conexión no existe o el usuario no participa responde 404.
+Devuelve como máximo dos calificaciones (una por participante).
+Respuesta exitosa: 200 OK (data + puedeCalificar)
+"puedeCalificar" es true cuando la conexión está finalizada y el usuario
+autenticado todavía no calificó el intercambio.
+
+Nota: el promedio también aparece como "calificacion" ({ promedio, total }) en
+GET /api/usuarios/:id y GET /api/usuarios/perfil.
