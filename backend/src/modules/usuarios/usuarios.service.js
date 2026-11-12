@@ -1,6 +1,14 @@
 // Servicio del módulo de usuarios.
 
 import * as usuariosRepository from './usuarios.repository.js';
+import * as habilidadesUsuarioRepository from '../habilidades-usuario/habilidades-usuario.repository.js';
+import {
+    agruparPorUsuario,
+    habilidadesVacias,
+    mapearOfrecida,
+    mapearRequerida
+} from '../habilidades-usuario/habilidades-usuario.mapper.js';
+import { construirPaginacion } from '../../utils/consulta.js';
 import { elegirCampo } from '../../utils/campos.js';
 
 // Crea un error con código HTTP.
@@ -46,6 +54,7 @@ export async function obtenerPerfil(idUsuario) {
 }
 
 // Consulta un usuario por identificador.
+// Devuelve solo información pública e incluye sus habilidades registradas.
 export async function obtenerUsuario(idUsuario) {
     const usuario = await usuariosRepository.findById(idUsuario);
 
@@ -53,10 +62,65 @@ export async function obtenerUsuario(idUsuario) {
         throw crearError(404, 'El usuario no existe.');
     }
 
+    const [ofrecidas, requeridas] = await Promise.all([
+        habilidadesUsuarioRepository.findOfrecidasByUsuario(idUsuario),
+        habilidadesUsuarioRepository.findRequeridasByUsuario(idUsuario)
+    ]);
+
+    return {
+        ...mapearUsuarioPublico(usuario),
+        habilidades: {
+            ofrecidas: ofrecidas.map(mapearOfrecida),
+            requeridas: requeridas.map(mapearRequerida)
+        }
+    };
+}
+
+// Busca usuarios por nombre, ubicación o habilidades, con paginación.
+// Solo se listan cuentas activas y sin datos sensibles.
+export async function buscarUsuarios({
+    filtros,
+    pagina,
+    limite,
+    desplazamiento
+}) {
+    const total = await usuariosRepository.contarUsuarios(filtros);
+
+    const paginacion = construirPaginacion({ total, pagina, limite });
+
+    // Si no hay resultados evitamos las consultas del listado.
+    if (total === 0) {
+        return { usuarios: [], paginacion };
+    }
+
+    const filas = await usuariosRepository.buscarUsuarios(filtros, {
+        limite,
+        desplazamiento
+    });
+
+    // Las habilidades de toda la página se resuelven con dos consultas.
+    const ids = filas.map((fila) => fila.id_usuario);
+
+    const [ofrecidas, requeridas] = await Promise.all([
+        habilidadesUsuarioRepository.findOfrecidasByUsuarios(ids),
+        habilidadesUsuarioRepository.findRequeridasByUsuarios(ids)
+    ]);
+
+    const habilidades = agruparPorUsuario(ofrecidas, requeridas);
+
+    const usuarios = filas.map((fila) => ({
+        ...mapearUsuarioPublico(fila),
+        habilidades: habilidades.get(fila.id_usuario) ?? habilidadesVacias()
+    }));
+
+    return { usuarios, paginacion };
+}
+
+// Quita los datos que no deben exponerse en las consultas públicas.
+function mapearUsuarioPublico(usuario) {
     const { correoElectronico, estadoCuenta, ultimoAcceso, ...publico } =
         mapearUsuario(usuario);
 
-    // No exponemos el correo ni datos sensibles en consultas públicas.
     return publico;
 }
 

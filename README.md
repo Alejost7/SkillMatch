@@ -173,7 +173,7 @@ El módulo de habilidades permite administrar el catálogo de habilidades asocia
 El módulo permite:
 
 - Listar todas las habilidades registradas.
-- Listar las habilidades asociadas a una categoría específica.
+- Filtrar el catálogo por categoría, nombre y estado, con paginación.
 - Consultar una habilidad por su identificador.
 - Crear una nueva habilidad asociada a una categoría existente.
 - Actualizar una habilidad existente.
@@ -188,12 +188,61 @@ Las consultas del catálogo son públicas; crear, actualizar o eliminar exige un
 
 | Método   | Ruta                             | Protegido          | Descripción                                       |
 | -------- | -------------------------------- | ------------------ | ------------------------------------------------- |
-| `GET`    | `/api/habilidades`               | No                 | Lista todas las habilidades                       |
-| `GET`    | `/api/habilidades?categoriaId=1` | No                 | Lista las habilidades de una categoría específica |
+| `GET`    | `/api/habilidades`               | No                 | Lista habilidades con filtros y paginación        |
 | `GET`    | `/api/habilidades/:id`           | No                 | Consulta una habilidad por su identificador       |
 | `POST`   | `/api/habilidades`               | Sí (administrador) | Crea una habilidad                                |
 | `PUT`    | `/api/habilidades/:id`           | Sí (administrador) | Actualiza una habilidad                           |
 | `DELETE` | `/api/habilidades/:id`           | Sí (administrador) | Elimina una habilidad                             |
+
+### Filtros y paginación del catálogo
+
+`GET /api/habilidades` acepta estos parámetros opcionales de consulta:
+
+| Parámetro     | Tipo   | Por defecto | Descripción                                             |
+| ------------- | ------ | ----------- | ------------------------------------------------------- |
+| `categoriaId` | entero | —           | Solo habilidades de esa categoría                       |
+| `nombre`      | texto  | —           | Búsqueda parcial por nombre                             |
+| `estado`      | texto  | —           | `activo` o `inactivo`                                   |
+| `orden`       | texto  | `nombre`    | `nombre` (A-Z) o `recientes` (últimas creadas primero)  |
+| `page`        | entero | `1`         | Página solicitada                                       |
+| `limit`       | entero | `10`        | Resultados por página (máximo `50`)                     |
+
+La respuesta incluye el arreglo `data` y el objeto `paginacion`, que el frontend usa para construir el paginador.
+
+**Petición:**
+
+```http
+GET /api/habilidades?categoriaId=1&nombre=java&estado=activo&page=1&limit=5
+```
+
+**Respuesta exitosa:**
+
+```json
+{
+  "success": true,
+  "message": "Habilidades consultadas correctamente.",
+  "data": [
+    {
+      "id_habilidad": 1,
+      "id_categoria": 1,
+      "categoria": "Programación",
+      "nombre": "JavaScript",
+      "descripcion": "Fundamentos de programación con JavaScript.",
+      "estado": "activo"
+    }
+  ],
+  "paginacion": {
+    "pagina": 1,
+    "limite": 5,
+    "total": 1,
+    "totalPaginas": 1,
+    "tieneAnterior": false,
+    "tieneSiguiente": false
+  }
+}
+```
+
+Si un parámetro no es válido (`page=0`, `limit=51`, `estado=borrado`, `orden=precio`), la API responde `400` con la lista de errores en `errors`.
 
 ### Ejemplo de creación de habilidad
 
@@ -273,11 +322,87 @@ El módulo de usuarios permite consultar el perfil del usuario autenticado, actu
 
 ### Endpoints de usuarios
 
-| Método | Ruta                   | Protegido | Descripción                                   |
-| ------ | ---------------------- | --------- | --------------------------------------------- |
-| `GET`  | `/api/usuarios/perfil` | Sí        | Consulta el perfil del usuario autenticado    |
-| `PUT`  | `/api/usuarios/perfil` | Sí        | Actualiza el perfil del usuario autenticado   |
-| `GET`  | `/api/usuarios/:id`    | No        | Consulta la información pública de un usuario |
+| Método | Ruta                   | Protegido | Descripción                                        |
+| ------ | ---------------------- | --------- | -------------------------------------------------- |
+| `GET`  | `/api/usuarios/perfil` | Sí        | Consulta el perfil del usuario autenticado         |
+| `PUT`  | `/api/usuarios/perfil` | Sí        | Actualiza el perfil del usuario autenticado        |
+| `GET`  | `/api/usuarios`        | No        | Busca usuarios por nombre, ubicación o habilidades |
+| `GET`  | `/api/usuarios/:id`    | No        | Consulta la información pública de un usuario      |
+
+### Búsqueda de usuarios
+
+`GET /api/usuarios` permite encontrar personas con quienes intercambiar habilidades. Solo devuelve cuentas con `estado_cuenta = activo` y nunca incluye el correo electrónico ni la fecha del último acceso.
+
+| Parámetro            | Tipo   | Descripción                                                |
+| -------------------- | ------ | ---------------------------------------------------------- |
+| `nombre`             | texto  | Busca en nombres, apellidos y alias                        |
+| `ciudad`             | texto  | Ciudad del perfil                                          |
+| `pais`               | texto  | País del perfil                                            |
+| `habilidadOfrecida`  | texto  | Usuarios que ofrecen una habilidad con ese nombre          |
+| `habilidadRequerida` | texto  | Usuarios que desean aprender una habilidad con ese nombre  |
+| `page`               | entero | Página solicitada (por defecto `1`)                        |
+| `limit`              | entero | Resultados por página (por defecto `10`, máximo `50`)      |
+
+Todos los textos usan coincidencia parcial y las habilidades del usuario se devuelven agrupadas:
+
+**Petición:**
+
+```http
+GET /api/usuarios?habilidadOfrecida=java&ciudad=tunja&page=1&limit=10
+```
+
+**Respuesta exitosa:**
+
+```json
+{
+  "success": true,
+  "message": "Usuarios consultados correctamente.",
+  "data": [
+    {
+      "idUsuario": 3,
+      "idRol": 1,
+      "rol": "usuario",
+      "nombres": "Ana",
+      "apellidos": "Gómez",
+      "alias": "anagomez",
+      "fechaRegistro": "2026-11-12T17:05:39.000Z",
+      "perfil": {
+        "biografia": "Estudiante de ingeniería de sistemas.",
+        "fotoPerfilUrl": null,
+        "disponibilidad": "Tardes",
+        "ciudad": "Tunja",
+        "pais": "Colombia"
+      },
+      "habilidades": {
+        "ofrecidas": [
+          {
+            "idHabilidadOfrecida": 3,
+            "idHabilidad": 1,
+            "habilidad": "JavaScript",
+            "idCategoria": 1,
+            "categoria": "Programación",
+            "nivel": "avanzado",
+            "descripcionApoyo": null,
+            "estado": "activo",
+            "fechaRegistro": "2026-11-12T17:05:39.000Z"
+          }
+        ],
+        "requeridas": []
+      }
+    }
+  ],
+  "paginacion": {
+    "pagina": 1,
+    "limite": 10,
+    "total": 1,
+    "totalPaginas": 1,
+    "tieneAnterior": false,
+    "tieneSiguiente": false
+  }
+}
+```
+
+`GET /api/usuarios/:id` devuelve la misma estructura de un usuario, también con el bloque `habilidades`.
 
 ### Ejemplo de registro
 
@@ -562,9 +687,10 @@ Qué cubre la suite:
 - Autenticación (`tests/middlewares/autenticacion.test.js`): formato del encabezado `Authorization`, tokens válidos, expirados, firmados con otro secreto o sin firma, y autorización de administrador.
 - Manejo de errores (`tests/middlewares/errorHandler.test.js`) y rutas inexistentes (`tests/middlewares/notFound.test.js`).
 - Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores.
-- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones y el 401 de las ocho rutas de habilidades del usuario.
+- Utilidades de listados (`tests/utils/consulta.test.js`): valores por defecto de `page` y `limit`, metadatos de paginación y validación de filtros de texto, identificadores y valores cerrados (`estado`, `orden`).
+- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`) y el 401 de las ocho rutas de habilidades del usuario.
 
-La suite completa suma 103 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
+La suite completa suma 121 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
 
 El archivo `tests/entorno-pruebas.js` define variables de entorno mínimas para que las pruebas puedan cargar la configuración sin depender de un `.env` específico.
 
@@ -585,14 +711,18 @@ Desde el frontend se pueden realizar las siguientes pruebas. Crear, editar o eli
 Desde Postman se pueden realizar las siguientes pruebas. Crear, editar o eliminar exige un token de administrador:
 
 1. Listar todas las habilidades.
-2. Listar habilidades filtradas por categoría mediante el parámetro `categoriaId`.
-3. Consultar una habilidad por su identificador.
-4. Crear una habilidad asociada a una categoría existente.
-5. Intentar crear una habilidad sin categoría o con una categoría inexistente.
-6. Intentar crear una habilidad duplicada dentro de la misma categoría.
-7. Actualizar una habilidad existente.
-8. Eliminar una habilidad.
-9. Verificar que la lista se actualice correctamente después de cada operación.
+2. Paginar el listado con `page` y `limit` y comprobar el objeto `paginacion`.
+3. Filtrar por categoría con `categoriaId`.
+4. Buscar por `nombre` y comprobar que la coincidencia sea parcial.
+5. Filtrar por `estado=activo` y ordenar con `orden=recientes`.
+6. Enviar `limit=51` o `page=0` y comprobar que la API responda `400`.
+7. Consultar una habilidad por su identificador.
+8. Crear una habilidad asociada a una categoría existente.
+9. Intentar crear una habilidad sin categoría o con una categoría inexistente.
+10. Intentar crear una habilidad duplicada dentro de la misma categoría.
+11. Actualizar una habilidad existente.
+12. Eliminar una habilidad.
+13. Verificar que la lista se actualice correctamente después de cada operación.
 
 ## Pruebas del módulo de autenticación y usuarios
 
@@ -606,8 +736,12 @@ Desde Postman se pueden realizar las siguientes pruebas:
 6. Consultar el perfil del usuario autenticado mediante `GET /api/usuarios/perfil`.
 7. Intentar consultar el perfil protegido sin enviar el token.
 8. Actualizar el perfil del usuario autenticado mediante `PUT /api/usuarios/perfil`.
-9. Consultar la información pública de un usuario mediante `GET /api/usuarios/:id`.
-10. Verificar que las rutas protegidas rechacen peticiones con un token inválido o expirado.
+9. Consultar la información pública de un usuario mediante `GET /api/usuarios/:id` y comprobar que incluya `habilidades`.
+10. Buscar usuarios por habilidad ofrecida mediante `GET /api/usuarios?habilidadOfrecida=javascript`.
+11. Repetir la búsqueda con `habilidadRequerida`, `nombre`, `ciudad` y `pais`.
+12. Comprobar que el listado devuelva `paginacion` y que no exponga `correoElectronico`.
+13. Enviar `page=0` o un `nombre` de más de 100 caracteres y comprobar que la API responda `400`.
+14. Verificar que las rutas protegidas rechacen peticiones con un token inválido o expirado.
 
 ## Pruebas del módulo de habilidades del usuario
 

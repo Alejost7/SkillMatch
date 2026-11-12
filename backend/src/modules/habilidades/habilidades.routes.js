@@ -12,7 +12,7 @@ import {
 
 import {
     validarIdHabilidad,
-    validarFiltroCategoria,
+    validarFiltrosHabilidades,
     validarCrearHabilidad,
     validarActualizarHabilidad
 } from './habilidades.validation.js';
@@ -23,8 +23,9 @@ const router = Router();
 
 // Rutas públicas: cualquiera puede consultar el catálogo de habilidades.
 // GET /api/habilidades
-// GET /api/habilidades?categoriaId=1
-router.get('/', validarFiltroCategoria, listarHabilidades);
+// GET /api/habilidades?categoriaId=1&nombre=java&estado=activo&orden=nombre&page=1&limit=10
+router.get('/', validarFiltrosHabilidades, listarHabilidades);
+
 
 // GET /api/habilidades/5
 router.get('/:id', validarIdHabilidad, obtenerHabilidad);

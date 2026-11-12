@@ -10,6 +10,7 @@ import {
 } from '../../src/modules/auth/auth.validation.js';
 import {
     validarActualizarPerfil,
+    validarFiltrosUsuarios,
     validarIdUsuario
 } from '../../src/modules/usuarios/usuarios.validation.js';
 import {
@@ -20,7 +21,7 @@ import {
 import {
     validarActualizarHabilidad,
     validarCrearHabilidad,
-    validarFiltroCategoria,
+    validarFiltrosHabilidades,
     validarIdHabilidad
 } from '../../src/modules/habilidades/habilidades.validation.js';
 import { crearReq, crearRes, ejecutarMiddleware } from '../helpers/fakes.js';
@@ -343,43 +344,154 @@ test('validarActualizarPerfil rechaza campos no permitidos', () => {
     );
 });
 
-test('validarFiltroCategoria deja el filtro vacío si no se envía', () => {
+test('validarFiltrosHabilidades aplica los valores por defecto', () => {
     const res = crearRes();
 
     const continuo = ejecutarMiddleware(
-        validarFiltroCategoria,
+        validarFiltrosHabilidades,
         crearReq({ query: {} }),
         res
     );
 
     assert.equal(continuo, true);
-    assert.equal(res.locals.idCategoria, null);
+    assert.deepEqual(res.locals.busquedaHabilidades, {
+        filtros: {
+            idCategoria: undefined,
+            nombre: undefined,
+            estado: undefined,
+            orden: undefined
+        },
+        pagina: 1,
+        limite: 10,
+        desplazamiento: 0
+    });
 });
 
-test('validarFiltroCategoria convierte el parámetro a número', () => {
+test('validarFiltrosHabilidades normaliza los filtros y la paginación', () => {
     const res = crearRes();
 
     ejecutarMiddleware(
-        validarFiltroCategoria,
-        crearReq({ query: { categoriaId: '4' } }),
+        validarFiltrosHabilidades,
+        crearReq({
+            query: {
+                categoriaId: '4',
+                nombre: '  Java  ',
+                estado: 'ACTIVO',
+                orden: 'recientes',
+                page: '2',
+                limit: '5'
+            }
+        }),
         res
     );
 
-    assert.equal(res.locals.idCategoria, 4);
+    assert.deepEqual(res.locals.busquedaHabilidades, {
+        filtros: {
+            idCategoria: 4,
+            nombre: 'Java',
+            estado: 'activo',
+            orden: 'recientes'
+        },
+        pagina: 2,
+        limite: 5,
+        desplazamiento: 5
+    });
 });
 
-test('validarFiltroCategoria rechaza un parámetro inválido', () => {
+test('validarFiltrosHabilidades rechaza parámetros inválidos', () => {
     const res = crearRes();
 
     const continuo = ejecutarMiddleware(
-        validarFiltroCategoria,
-        crearReq({ query: { categoriaId: 'x' } }),
+        validarFiltrosHabilidades,
+        crearReq({
+            query: {
+                categoriaId: 'x',
+                nombre: 'x'.repeat(101),
+                estado: 'borrado',
+                orden: 'precio',
+                page: '0',
+                limit: '500'
+            }
+        }),
         res
     );
 
     assert.equal(continuo, false);
     assert.equal(res.statusCode, 400);
-    assert.match(res.body.message, /categoriaId/);
+    assert.equal(res.body.errors.length, 6);
+    assert.ok(res.body.errors.some((error) => /categoriaId/.test(error)));
+    assert.ok(res.body.errors.some((error) => /orden/.test(error)));
+});
+
+test('validarFiltrosUsuarios aplica los valores por defecto', () => {
+    const res = crearRes();
+
+    const continuo = ejecutarMiddleware(
+        validarFiltrosUsuarios,
+        crearReq({ query: {} }),
+        res
+    );
+
+    assert.equal(continuo, true);
+    assert.deepEqual(res.locals.busquedaUsuarios, {
+        filtros: {
+            nombre: undefined,
+            ciudad: undefined,
+            pais: undefined,
+            habilidadOfrecida: undefined,
+            habilidadRequerida: undefined
+        },
+        pagina: 1,
+        limite: 10,
+        desplazamiento: 0
+    });
+});
+
+test('validarFiltrosUsuarios normaliza los textos y rechaza valores largos', () => {
+    const valido = crearRes();
+
+    ejecutarMiddleware(
+        validarFiltrosUsuarios,
+        crearReq({
+            query: {
+                nombre: '  Ana  ',
+                ciudad: ' Tunja ',
+                habilidadOfrecida: 'JavaScript',
+                page: '3',
+                limit: '50'
+            }
+        }),
+        valido
+    );
+
+    assert.deepEqual(valido.locals.busquedaUsuarios.filtros, {
+        nombre: 'Ana',
+        ciudad: 'Tunja',
+        pais: undefined,
+        habilidadOfrecida: 'JavaScript',
+        habilidadRequerida: undefined
+    });
+    assert.equal(valido.locals.busquedaUsuarios.desplazamiento, 100);
+
+    const invalido = crearRes();
+
+    const continuo = ejecutarMiddleware(
+        validarFiltrosUsuarios,
+        crearReq({
+            query: {
+                nombre: 'x'.repeat(101),
+                ciudad: 'x'.repeat(81),
+                habilidadRequerida: 'x'.repeat(101),
+                page: 'abc',
+                limit: '0'
+            }
+        }),
+        invalido
+    );
+
+    assert.equal(continuo, false);
+    assert.equal(invalido.statusCode, 400);
+    assert.equal(invalido.body.errors.length, 5);
 });
 
 test('validarCrearHabilidad aplica los valores por defecto', () => {

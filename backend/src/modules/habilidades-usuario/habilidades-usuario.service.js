@@ -4,6 +4,7 @@
 
 import * as habilidadesUsuarioRepository from './habilidades-usuario.repository.js';
 import * as habilidadesRepository from '../habilidades/habilidades.repository.js';
+import { mapearOfrecida, mapearRequerida } from './habilidades-usuario.mapper.js';
 import { elegirCampo } from '../../utils/campos.js';
 
 // Mensajes reutilizados para que las respuestas sean consistentes.
@@ -21,36 +22,6 @@ function crearError(status, message) {
     const error = new Error(message);
     error.status = status;
     return error;
-}
-
-// Convierte una fila de usuario_habilidad_ofrecida a camelCase.
-function mapearOfrecida(fila) {
-    return {
-        idHabilidadOfrecida: fila.id_habilidad_ofrecida,
-        idHabilidad: fila.id_habilidad,
-        habilidad: fila.habilidad,
-        idCategoria: fila.id_categoria,
-        categoria: fila.categoria,
-        nivel: fila.nivel,
-        descripcionApoyo: fila.descripcion_apoyo,
-        estado: fila.estado,
-        fechaRegistro: fila.fecha_registro
-    };
-}
-
-// Convierte una fila de usuario_habilidad_requerida a camelCase.
-function mapearRequerida(fila) {
-    return {
-        idHabilidadRequerida: fila.id_habilidad_requerida,
-        idHabilidad: fila.id_habilidad,
-        habilidad: fila.habilidad,
-        idCategoria: fila.id_categoria,
-        categoria: fila.categoria,
-        nivelDeseado: fila.nivel_deseado,
-        objetivoAprendizaje: fila.objetivo_aprendizaje,
-        estado: fila.estado,
-        fechaRegistro: fila.fecha_registro
-    };
 }
 
 // Verifica que la habilidad exista en el catálogo y que esté activa.

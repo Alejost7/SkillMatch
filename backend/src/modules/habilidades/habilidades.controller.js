@@ -3,17 +3,19 @@
 
 import * as habilidadesService from './habilidades.service.js';
 
-// Lista todas las habilidades o las filtra por categoría.
+// Lista las habilidades aplicando filtros y paginación.
 export async function listarHabilidades(req, res, next) {
     try {
-        const habilidades = await habilidadesService.listarHabilidades(
-        res.locals.idCategoria
-        );
+        const { habilidades, paginacion } =
+            await habilidadesService.listarHabilidades(
+                res.locals.busquedaHabilidades
+            );
 
         return res.status(200).json({
-        success: true,
-        message: 'Habilidades consultadas correctamente.',
-        data: habilidades
+            success: true,
+            message: 'Habilidades consultadas correctamente.',
+            data: habilidades,
+            paginacion
         });
     } catch (error) {
         next(error);
@@ -24,13 +26,13 @@ export async function listarHabilidades(req, res, next) {
 export async function obtenerHabilidad(req, res, next) {
     try {
         const habilidad = await habilidadesService.obtenerHabilidad(
-        res.locals.idHabilidad
+            res.locals.idHabilidad
         );
 
         return res.status(200).json({
-        success: true,
-        message: 'Habilidad consultada correctamente.',
-        data: habilidad
+            success: true,
+            message: 'Habilidad consultada correctamente.',
+            data: habilidad
         });
     } catch (error) {
         next(error);
@@ -41,13 +43,13 @@ export async function obtenerHabilidad(req, res, next) {
 export async function crearHabilidad(req, res, next) {
     try {
         const habilidad = await habilidadesService.crearHabilidad(
-        res.locals.habilidad
+            res.locals.habilidad
         );
 
         return res.status(201).json({
-        success: true,
-        message: 'Habilidad creada correctamente.',
-        data: habilidad
+            success: true,
+            message: 'Habilidad creada correctamente.',
+            data: habilidad
         });
     } catch (error) {
         next(error);
@@ -58,14 +60,14 @@ export async function crearHabilidad(req, res, next) {
 export async function actualizarHabilidad(req, res, next) {
     try {
         const habilidad = await habilidadesService.actualizarHabilidad(
-        res.locals.idHabilidad,
-        res.locals.habilidad
+            res.locals.idHabilidad,
+            res.locals.habilidad
         );
 
         return res.status(200).json({
-        success: true,
-        message: 'Habilidad actualizada correctamente.',
-        data: habilidad
+            success: true,
+            message: 'Habilidad actualizada correctamente.',
+            data: habilidad
         });
     } catch (error) {
         next(error);
@@ -78,8 +80,8 @@ export async function eliminarHabilidad(req, res, next) {
         await habilidadesService.eliminarHabilidad(res.locals.idHabilidad);
 
         return res.status(200).json({
-        success: true,
-        message: 'Habilidad eliminada correctamente.'
+            success: true,
+            message: 'Habilidad eliminada correctamente.'
         });
     } catch (error) {
         next(error);

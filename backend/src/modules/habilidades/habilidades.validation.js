@@ -1,5 +1,24 @@
 // Validaciones del módulo de habilidades.
 
+import {
+    leerIdFiltro,
+    leerOpcionFiltro,
+    leerPaginacion,
+    leerTextoFiltro
+} from '../../utils/consulta.js';
+
+// Valores permitidos por las restricciones CHECK de database/shema.sql.
+const ESTADOS = ['activo', 'inactivo'];
+
+// Ordenamientos disponibles para el listado.
+const ORDENAMIENTOS = ['nombre', 'recientes'];
+
+// Longitud máxima del filtro por nombre. Coincide con la columna nombre.
+const MAX_NOMBRE_FILTRO = 100;
+
+// Campos que el cliente puede enviar al crear o actualizar una habilidad.
+const CAMPOS = ['idCategoria', 'nombre', 'descripcion', 'estado'];
+
 // Valida que el identificador recibido por parámetro sea válido.
 export function validarIdHabilidad(req, res, next) {
     const valor = req.params.id;
@@ -11,8 +30,8 @@ export function validarIdHabilidad(req, res, next) {
         id > 4294967295
     ) {
         return res.status(400).json({
-        success: false,
-        message: 'El identificador debe ser un entero positivo válido.'
+            success: false,
+            message: 'El identificador debe ser un entero positivo válido.'
         });
     }
 
@@ -21,30 +40,54 @@ export function validarIdHabilidad(req, res, next) {
     next();
 }
 
-// Valida el parámetro opcional categoriaId usado para filtrar habilidades.
-export function validarFiltroCategoria(req, res, next) {
-    const { categoriaId } = req.query;
+// Valida los filtros y la paginación del listado de habilidades.
+// Parámetros admitidos: categoriaId, nombre, estado, orden, page y limit.
+export function validarFiltrosHabilidades(req, res, next) {
+    const { query } = req;
+    const errores = [];
 
-    // Si no se envía el filtro, continuamos sin filtrar.
-    if (categoriaId === undefined) {
-        res.locals.idCategoria = null;
-        return next();
-    }
+    // Separamos los errores de los datos utilizables.
+    const { errores: erroresPaginacion, ...paginacion } = leerPaginacion(query);
 
-    const id = Number(categoriaId);
+    errores.push(...erroresPaginacion);
 
-    if (
-        !/^[1-9]\d*$/.test(categoriaId) ||
-        !Number.isSafeInteger(id) ||
-        id > 4294967295
-    ) {
+    const filtros = {
+        idCategoria: leerIdFiltro(
+            query.categoriaId,
+            'El parámetro categoriaId',
+            errores
+        ),
+        nombre: leerTextoFiltro(
+            query.nombre,
+            MAX_NOMBRE_FILTRO,
+            'El parámetro nombre',
+            errores
+        ),
+        estado: leerOpcionFiltro(
+            query.estado,
+            ESTADOS,
+            'El parámetro estado',
+            errores
+        ),
+        orden: leerOpcionFiltro(
+            query.orden,
+            ORDENAMIENTOS,
+            'El parámetro orden',
+            errores
+        )
+    };
+
+    if (errores.length > 0) {
         return res.status(400).json({
-        success: false,
-        message: 'El parámetro categoriaId debe ser un entero positivo válido.'
+            success: false,
+            message: 'Hay errores en los filtros enviados.',
+            errors: errores
         });
     }
 
-    res.locals.idCategoria = id;
+    // Datos listos para el servicio.
+    res.locals.busquedaHabilidades = { filtros, ...paginacion };
+
     next();
 }
 
@@ -55,31 +98,30 @@ function validarDatosHabilidad(req, res, next, esActualizacion) {
     // Verificamos que el cliente haya enviado un objeto JSON válido.
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
         return res.status(400).json({
-        success: false,
-        message: 'Debes enviar un objeto JSON.'
+            success: false,
+            message: 'Debes enviar un objeto JSON.'
         });
     }
 
     const errores = [];
-    const camposPermitidos = ['idCategoria', 'nombre', 'descripcion', 'estado'];
 
     // Detectamos campos que no pertenecen al recurso habilidad.
     const camposDesconocidos = Object.keys(body).filter(
-        (campo) => !camposPermitidos.includes(campo)
+        (campo) => !CAMPOS.includes(campo)
     );
 
     if (camposDesconocidos.length > 0) {
-        errores.push(
-        `Campos no permitidos: ${camposDesconocidos.join(', ')}.`
-        );
+        errores.push(`Campos no permitidos: ${camposDesconocidos.join(', ')}.`);
     }
 
     // En actualización, todos los campos son obligatorios.
     if (esActualizacion) {
-        for (const campo of camposPermitidos) {
-        if (!Object.prototype.hasOwnProperty.call(body, campo)) {
-            errores.push(`El campo ${campo} es obligatorio para actualizar.`);
-        }
+        for (const campo of CAMPOS) {
+            if (!Object.hasOwn(body, campo)) {
+                errores.push(
+                    `El campo ${campo} es obligatorio para actualizar.`
+                );
+            }
         }
     }
 
@@ -92,13 +134,12 @@ function validarDatosHabilidad(req, res, next, esActualizacion) {
         idCategoria > 4294967295
     ) {
         errores.push(
-        'El campo idCategoria debe ser un entero positivo válido.'
+            'El campo idCategoria debe ser un entero positivo válido.'
         );
     }
 
     // Validamos el nombre de la habilidad.
-    const nombre =
-        typeof body.nombre === 'string' ? body.nombre.trim() : '';
+    const nombre = typeof body.nombre === 'string' ? body.nombre.trim() : '';
 
     if (nombre.length === 0 || [...nombre].length > 100) {
         errores.push('El nombre debe tener entre 1 y 100 caracteres.');
@@ -110,10 +151,8 @@ function validarDatosHabilidad(req, res, next, esActualizacion) {
     if (
         descripcion !== undefined &&
         descripcion !== null &&
-        (
-        typeof descripcion !== 'string' ||
-        [...descripcion.trim()].length > 255
-        )
+        (typeof descripcion !== 'string' ||
+            [...descripcion.trim()].length > 255)
     ) {
         errores.push('La descripción debe ser texto de hasta 255 caracteres.');
     }
@@ -121,19 +160,19 @@ function validarDatosHabilidad(req, res, next, esActualizacion) {
     // El estado es opcional al crear; por defecto será activo.
     const estado =
         body.estado === undefined && !esActualizacion
-        ? 'activo'
-        : body.estado;
+            ? 'activo'
+            : body.estado;
 
-    if (!['activo', 'inactivo'].includes(estado)) {
+    if (!ESTADOS.includes(estado)) {
         errores.push('El estado debe ser activo o inactivo.');
     }
 
     // Si hay errores, respondemos con 400 y no continuamos.
     if (errores.length > 0) {
         return res.status(400).json({
-        success: false,
-        message: 'Hay errores en los datos enviados.',
-        errors: errores
+            success: false,
+            message: 'Hay errores en los datos enviados.',
+            errors: errores
         });
     }
 
@@ -142,9 +181,9 @@ function validarDatosHabilidad(req, res, next, esActualizacion) {
         idCategoria,
         nombre,
         descripcion:
-        typeof descripcion === 'string'
-            ? descripcion.trim() || null
-            : null,
+            typeof descripcion === 'string'
+                ? descripcion.trim() || null
+                : null,
         estado
     };
 

@@ -19,6 +19,24 @@ export async function obtenerPerfil(req, res, next) {
     }
 }
 
+// GET /api/usuarios
+export async function listarUsuarios(req, res, next) {
+    try {
+        const { usuarios, paginacion } = await usuariosService.buscarUsuarios(
+            res.locals.busquedaUsuarios
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: 'Usuarios consultados correctamente.',
+            data: usuarios,
+            paginacion
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
 // GET /api/usuarios/:id
 export async function obtenerUsuario(req, res, next) {
     try {

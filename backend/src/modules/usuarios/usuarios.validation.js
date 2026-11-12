@@ -1,5 +1,16 @@
 // Validaciones del módulo de usuarios.
 
+import {
+    leerPaginacion,
+    leerTextoFiltro
+} from '../../utils/consulta.js';
+
+// Longitudes máximas de los textos usados como filtro.
+// Coinciden con las columnas definidas en database/shema.sql.
+const MAX_NOMBRE_FILTRO = 100;
+const MAX_CIUDAD_FILTRO = 80;
+const MAX_PAIS_FILTRO = 80;
+
 // Valida el identificador recibido en la URL.
 export function validarIdUsuario(req, res, next) {
     const valor = req.params.id;
@@ -11,12 +22,71 @@ export function validarIdUsuario(req, res, next) {
         id > 4294967295
     ) {
         return res.status(400).json({
-        success: false,
-        message: 'El identificador debe ser un entero positivo válido.'
+            success: false,
+            message: 'El identificador debe ser un entero positivo válido.'
         });
     }
 
     res.locals.idUsuario = id;
+    next();
+}
+
+// Valida los filtros y la paginación del listado de usuarios.
+// Parámetros admitidos: nombre, ciudad, pais, habilidadOfrecida,
+// habilidadRequerida, page y limit.
+export function validarFiltrosUsuarios(req, res, next) {
+    const { query } = req;
+    const errores = [];
+
+    // Separamos los errores de los datos utilizables.
+    const { errores: erroresPaginacion, ...paginacion } = leerPaginacion(query);
+
+    errores.push(...erroresPaginacion);
+
+    const filtros = {
+        nombre: leerTextoFiltro(
+            query.nombre,
+            MAX_NOMBRE_FILTRO,
+            'El parámetro nombre',
+            errores
+        ),
+        ciudad: leerTextoFiltro(
+            query.ciudad,
+            MAX_CIUDAD_FILTRO,
+            'El parámetro ciudad',
+            errores
+        ),
+        pais: leerTextoFiltro(
+            query.pais,
+            MAX_PAIS_FILTRO,
+            'El parámetro pais',
+            errores
+        ),
+        habilidadOfrecida: leerTextoFiltro(
+            query.habilidadOfrecida,
+            MAX_NOMBRE_FILTRO,
+            'El parámetro habilidadOfrecida',
+            errores
+        ),
+        habilidadRequerida: leerTextoFiltro(
+            query.habilidadRequerida,
+            MAX_NOMBRE_FILTRO,
+            'El parámetro habilidadRequerida',
+            errores
+        )
+    };
+
+    if (errores.length > 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'Hay errores en los filtros enviados.',
+            errors: errores
+        });
+    }
+
+    // Datos listos para el servicio.
+    res.locals.busquedaUsuarios = { filtros, ...paginacion };
+
     next();
 }
 

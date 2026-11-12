@@ -156,7 +156,7 @@ test('GET /api/habilidades valida el filtro categoriaId', async () => {
 
     assert.equal(estado, 400);
     assert.equal(cuerpo.success, false);
-    assert.match(cuerpo.message, /categoriaId/);
+    assert.ok(cuerpo.errors.some((error) => /categoriaId/.test(error)));
 });
 
 test('GET /api/habilidades/:id valida el identificador', async () => {
@@ -370,5 +370,48 @@ test('PUT /api/habilidades-usuario/ofrecidas/1 exige al menos un campo', async (
     assert.deepEqual(cuerpo.errors, [
         'Debes enviar al menos un campo para actualizar.'
     ]);
+});
+
+test('GET /api/habilidades valida la paginación y los filtros', async () => {
+    const page = await pedir('/api/habilidades?page=0');
+
+    assert.equal(page.estado, 400);
+    assert.ok(page.cuerpo.errors.some((error) => /page/.test(error)));
+
+    const limit = await pedir('/api/habilidades?limit=51');
+
+    assert.equal(limit.estado, 400);
+    assert.ok(limit.cuerpo.errors.some((error) => /limit/.test(error)));
+
+    const estado = await pedir('/api/habilidades?estado=borrado');
+
+    assert.equal(estado.estado, 400);
+    assert.ok(estado.cuerpo.errors.some((error) => /estado/.test(error)));
+
+    const orden = await pedir('/api/habilidades?orden=precio');
+
+    assert.equal(orden.estado, 400);
+    assert.ok(orden.cuerpo.errors.some((error) => /orden/.test(error)));
+});
+
+test('GET /api/usuarios valida los filtros y la paginación', async () => {
+    const page = await pedir('/api/usuarios?page=abc');
+
+    assert.equal(page.estado, 400);
+    assert.ok(page.cuerpo.errors.some((error) => /page/.test(error)));
+
+    const nombre = await pedir(`/api/usuarios?nombre=${'x'.repeat(101)}`);
+
+    assert.equal(nombre.estado, 400);
+    assert.ok(nombre.cuerpo.errors.some((error) => /nombre/.test(error)));
+
+    const habilidad = await pedir(
+        `/api/usuarios?habilidadOfrecida=${'x'.repeat(101)}`
+    );
+
+    assert.equal(habilidad.estado, 400);
+    assert.ok(
+        habilidad.cuerpo.errors.some((error) => /habilidadOfrecida/.test(error))
+    );
 });
 

@@ -93,6 +93,120 @@ export async function findById(id) {
     return rows[0] ?? null;
 }
 
+// Columnas públicas que se devuelven en los listados de usuarios.
+// No se incluye el correo ni otros datos sensibles.
+const COLUMNAS_PUBLICAS = `
+    SELECT
+        u.id_usuario,
+        u.id_rol,
+        r.nombre AS rol,
+        u.nombres,
+        u.apellidos,
+        u.alias,
+        u.estado_cuenta,
+        u.fecha_registro,
+        p.biografia,
+        p.foto_perfil_url,
+        p.disponibilidad,
+        p.ciudad,
+        p.pais
+    FROM usuario u
+    INNER JOIN rol r ON r.id_rol = u.id_rol
+    LEFT JOIN perfil p ON p.id_usuario = u.id_usuario
+`;
+
+// Condición EXISTS que exige que el usuario tenga una habilidad (ofrecida o
+// requerida) cuyo nombre coincida con el texto buscado.
+// tabla: usuario_habilidad_ofrecida o usuario_habilidad_requerida.
+function condicionHabilidad(tabla, alias) {
+    return `EXISTS (
+        SELECT 1
+        FROM ${tabla} ${alias}
+        INNER JOIN habilidad h ON h.id_habilidad = ${alias}.id_habilidad
+        WHERE ${alias}.id_usuario = u.id_usuario
+            AND ${alias}.estado = 'activo'
+            AND h.nombre LIKE ?
+    )`;
+}
+
+// Construye el WHERE de la búsqueda de usuarios.
+// Solo se listan cuentas activas.
+function crearFiltrosUsuarios({
+    nombre,
+    ciudad,
+    pais,
+    habilidadOfrecida,
+    habilidadRequerida
+} = {}) {
+    const condiciones = ["u.estado_cuenta = 'activo'"];
+    const valores = [];
+
+    if (nombre) {
+        condiciones.push(
+            '(u.nombres LIKE ? OR u.apellidos LIKE ? OR u.alias LIKE ?)'
+        );
+        valores.push(`%${nombre}%`, `%${nombre}%`, `%${nombre}%`);
+    }
+
+    if (ciudad) {
+        condiciones.push('p.ciudad LIKE ?');
+        valores.push(`%${ciudad}%`);
+    }
+
+    if (pais) {
+        condiciones.push('p.pais LIKE ?');
+        valores.push(`%${pais}%`);
+    }
+
+    if (habilidadOfrecida) {
+        condiciones.push(
+            condicionHabilidad('usuario_habilidad_ofrecida', 'o')
+        );
+        valores.push(`%${habilidadOfrecida}%`);
+    }
+
+    if (habilidadRequerida) {
+        condiciones.push(
+            condicionHabilidad('usuario_habilidad_requerida', 'rq')
+        );
+        valores.push(`%${habilidadRequerida}%`);
+    }
+
+    return { where: `WHERE ${condiciones.join(' AND ')}`, valores };
+}
+
+// Busca usuarios que cumplen los filtros, con paginación.
+// LIMIT y OFFSET se interpolan porque ya son enteros validados; mysql2 no
+// admite marcadores preparados en esas cláusulas.
+export async function buscarUsuarios(filtros, { limite, desplazamiento }) {
+    const { where, valores } = crearFiltrosUsuarios(filtros);
+
+    const [rows] = await pool.execute(
+        `${COLUMNAS_PUBLICAS}
+        ${where}
+        ORDER BY u.nombres ASC, u.apellidos ASC, u.id_usuario ASC
+        LIMIT ${limite} OFFSET ${desplazamiento}`,
+        valores
+    );
+
+    return rows;
+}
+
+// Cuenta los usuarios que cumplen los filtros para calcular la paginación.
+export async function contarUsuarios(filtros) {
+    const { where, valores } = crearFiltrosUsuarios(filtros);
+
+    const [rows] = await pool.execute(
+        `SELECT COUNT(*) AS total
+        FROM usuario u
+        LEFT JOIN perfil p ON p.id_usuario = u.id_usuario
+        ${where}`,
+        valores
+    );
+
+    return Number(rows[0]?.total ?? 0);
+}
+
 // Crea un nuevo usuario.
 export async function create({
     idRol,

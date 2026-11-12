@@ -58,12 +58,29 @@ Respuesta exitosa: 200 OK
 =========================================================
 
 GET /api/habilidades
-Descripción: Lista todas las habilidades.
+Descripción: Lista las habilidades con filtros opcionales y paginación.
+Parámetros de consulta (todos opcionales):
+  categoriaId -> entero positivo. Solo habilidades de esa categoría.
+  nombre      -> texto de hasta 100 caracteres. Coincidencia parcial.
+  estado      -> activo | inactivo
+  orden       -> nombre (A-Z, por defecto) | recientes (últimas creadas)
+  page        -> entero entre 1 y 100000 (por defecto 1)
+  limit       -> entero entre 1 y 50 (por defecto 10)
 Respuesta exitosa: 200 OK
-
-GET /api/habilidades?categoriaId=1
-Descripción: Lista las habilidades de una categoría específica.
-Respuesta exitosa: 200 OK
+{
+  "success": true,
+  "message": "Habilidades consultadas correctamente.",
+  "data": [ ... ],
+  "paginacion": {
+    "pagina": 1,
+    "limite": 10,
+    "total": 8,
+    "totalPaginas": 1,
+    "tieneAnterior": false,
+    "tieneSiguiente": false
+  }
+}
+Nota: si un parámetro no es válido, responde 400 con la lista de errores.
 
 GET /api/habilidades/:id
 Descripción: Consulta una habilidad por su identificador.
@@ -170,8 +187,46 @@ opcionales y se guardan en la tabla perfil; si no se envían, se conserva el
 valor anterior. Enviar null o una cadena vacía limpia el campo.
 Respuesta exitosa: 200 OK
 
+GET /api/usuarios
+Descripción: Busca usuarios activos por nombre, ubicación o habilidades.
+Protegido: No
+Parámetros de consulta (todos opcionales):
+  nombre             -> busca en nombres, apellidos y alias (hasta 100 caracteres)
+  ciudad             -> ciudad del perfil (hasta 80 caracteres)
+  pais               -> país del perfil (hasta 80 caracteres)
+  habilidadOfrecida  -> usuarios que ofrecen una habilidad con ese nombre
+  habilidadRequerida -> usuarios que desean aprender una habilidad con ese nombre
+  page               -> entero entre 1 y 100000 (por defecto 1)
+  limit              -> entero entre 1 y 50 (por defecto 10)
+Respuesta exitosa: 200 OK
+{
+  "success": true,
+  "message": "Usuarios consultados correctamente.",
+  "data": [
+    {
+      "idUsuario": 3,
+      "idRol": 1,
+      "rol": "usuario",
+      "nombres": "Ana",
+      "apellidos": "Gómez",
+      "alias": "anagomez",
+      "fechaRegistro": "2026-11-12T17:05:39.000Z",
+      "perfil": { ... },
+      "habilidades": {
+        "ofrecidas": [ ... ],
+        "requeridas": [ ... ]
+      }
+    }
+  ],
+  "paginacion": { "pagina": 1, "limite": 10, "total": 1, "totalPaginas": 1 }
+}
+Nota: solo se listan cuentas con estado "activo" y nunca se devuelve el correo
+electrónico ni la fecha del último acceso. Los textos usan coincidencia parcial.
+Si un parámetro no es válido, responde 400 con la lista de errores.
+
 GET /api/usuarios/:id
-Descripción: Consulta la información pública de un usuario.
+Descripción: Consulta la información pública de un usuario, incluidos sus
+registros en "habilidades.ofrecidas" y "habilidades.requeridas".
 Protegido: No
 Respuesta exitosa: 200 OK
 

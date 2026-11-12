@@ -54,6 +54,26 @@ export async function findOfrecidasByUsuario(idUsuario) {
     return rows;
 }
 
+// Lista las habilidades ofrecidas de varios usuarios.
+// Se usa en los listados de usuarios para resolver todas las habilidades de la
+// página con una sola consulta.
+export async function findOfrecidasByUsuarios(ids) {
+    if (ids.length === 0) {
+        return [];
+    }
+
+    const marcadores = ids.map(() => '?').join(', ');
+
+    const [rows] = await pool.execute(
+        `${COLUMNAS_OFRECIDAS}
+        WHERE o.id_usuario IN (${marcadores})
+        ORDER BY h.nombre ASC`,
+        ids
+    );
+
+    return rows;
+}
+
 // Busca una habilidad ofrecida del usuario por su identificador.
 // El filtro por usuario impide consultar o modificar registros de otras personas.
 export async function findOfrecidaById(idOfrecida, idUsuario) {
@@ -122,6 +142,24 @@ export async function findRequeridasByUsuario(idUsuario) {
         WHERE r.id_usuario = ?
         ORDER BY h.nombre ASC`,
         [idUsuario]
+    );
+
+    return rows;
+}
+
+// Lista las habilidades requeridas de varios usuarios.
+export async function findRequeridasByUsuarios(ids) {
+    if (ids.length === 0) {
+        return [];
+    }
+
+    const marcadores = ids.map(() => '?').join(', ');
+
+    const [rows] = await pool.execute(
+        `${COLUMNAS_REQUERIDAS}
+        WHERE r.id_usuario IN (${marcadores})
+        ORDER BY h.nombre ASC`,
+        ids
     );
 
     return rows;
