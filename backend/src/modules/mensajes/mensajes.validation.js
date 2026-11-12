@@ -119,7 +119,9 @@ export function validarCrearMensaje(req, res, next) {
 }
 
 // Valida los filtros y la paginación del listado de mensajes.
-// Parámetros admitidos: conexionId, page y limit.
+// Parámetros admitidos: conexionId, desde, page y limit.
+// "desde" es el sondeo delta: devuelve solo los mensajes posteriores a ese
+// idMensaje (sin paginación), para clientes que no pueden usar SSE.
 export function validarFiltrosMensajes(req, res, next) {
     const { query } = req;
     const errores = [];
@@ -134,7 +136,8 @@ export function validarFiltrosMensajes(req, res, next) {
             query.conexionId,
             'El parámetro conexionId',
             errores
-        )
+        ),
+        desde: leerIdFiltro(query.desde, 'El parámetro desde', errores)
     };
 
     if (errores.length > 0) {

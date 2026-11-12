@@ -4,8 +4,9 @@
 
 import * as mensajesRepository from './mensajes.repository.js';
 import * as conexionesRepository from '../conexiones/conexiones.repository.js';
+import * as eventosRegistro from '../eventos/eventos.registro.js';
 import { mapearMensajeParaUsuario } from './mensajes.mapper.js';
-import { construirPaginacion } from '../../utils/consulta.js';
+import { construirPaginacion, LIMITE_MAXIMO } from '../../utils/consulta.js';
 
 // Mensaje único para conexiones inexistentes o ajenas: no se revela si el
 // registro existe cuando el usuario no participa en él.
@@ -40,6 +41,30 @@ async function buscarConexion(idUsuario, idConexion) {
     return fila;
 }
 
+// Avisa al otro participante por SSE. Se emite después de guardar en la base:
+// si el envío en tiempo real falla, el mensaje ya está persistido y el cliente
+// lo recupera con el sondeo delta.
+function notificarMensaje(mensaje, conexion, idUsuario) {
+    const idDestinatario =
+        conexion.id_usuario_emisor === idUsuario
+            ? conexion.id_usuario_receptor
+            : conexion.id_usuario_emisor;
+
+    eventosRegistro.emitirA(idDestinatario, 'mensaje', {
+        idMensaje: mensaje.idMensaje,
+        idConexion: mensaje.idConexion,
+        remitente: mensaje.remitente,
+        contenido: mensaje.contenido,
+        fechaEnvio: mensaje.fechaEnvio
+    });
+
+    // El contador de no leídos del destinatario cambió.
+    eventosRegistro.emitirA(idDestinatario, 'feed', {
+        motivo: 'mensaje',
+        idConexion: mensaje.idConexion
+    });
+}
+
 // Escribe un mensaje en una conversación activa.
 export async function enviarMensaje(idUsuario, { idConexion, contenido }) {
     const conexion = await buscarConexion(idUsuario, idConexion);
@@ -54,7 +79,11 @@ export async function enviarMensaje(idUsuario, { idConexion, contenido }) {
         contenido
     );
 
-    return mapearMensajeParaUsuario(fila, idUsuario);
+    const mensaje = mapearMensajeParaUsuario(fila, idUsuario);
+
+    notificarMensaje(mensaje, conexion, idUsuario);
+
+    return mensaje;
 }
 
 // Lista los mensajes que el usuario puede ver. Si se indica conexionId se
@@ -69,8 +98,26 @@ export async function listarMensajes(
 
     const consulta = {
         idUsuario,
-        idConexion: filtros.idConexion
+        idConexion: filtros.idConexion,
+        desde: filtros.desde
     };
+
+    // Sondeo delta: solo los mensajes posteriores al último visto, sin COUNT
+    // ni paginación. El cliente avanza su "desde" con el idMensaje mayor.
+    if (consulta.desde) {
+        const filas = await mensajesRepository.buscar({
+            ...consulta,
+            limite: LIMITE_MAXIMO,
+            desplazamiento: 0
+        });
+
+        return {
+            mensajes: filas.map((fila) =>
+                mapearMensajeParaUsuario(fila, idUsuario)
+            ),
+            desde: consulta.desde
+        };
+    }
 
     const total = await mensajesRepository.contar(consulta);
     const paginacion = construirPaginacion({ total, pagina, limite });

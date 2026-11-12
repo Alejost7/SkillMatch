@@ -313,7 +313,10 @@ CREATE TABLE mensaje (
     CONSTRAINT chk_mensaje_leido
         CHECK (leido IN (0, 1)),
 
-    INDEX idx_mensaje_conexion_fecha (id_conexion, fecha_envio)
+    INDEX idx_mensaje_conexion_fecha (id_conexion, fecha_envio),
+
+    -- Apoyo al sondeo delta: mensajes de una conexión con id mayor que N.
+    INDEX idx_mensaje_conexion_mensaje (id_conexion, id_mensaje)
 ) ENGINE=InnoDB;
 
 -- =========================================================

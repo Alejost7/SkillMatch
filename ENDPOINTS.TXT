@@ -457,6 +457,7 @@ Todas las rutas son privadas: solo los dos participantes de una conexión pueden
 leer y escribir sus mensajes. Cualquier otro usuario recibe 404.
 Valores permitidos:
   conexionId -> entero positivo (filtro opcional del listado)
+  desde      -> entero positivo (id del último mensaje ya conocido; opcional)
   contenido  -> texto de 1 a 1000 caracteres (se guarda recortado)
   page       -> entero entre 1 y 100000 (por defecto 1)
   limit      -> entero entre 1 y 50 (por defecto 10)
@@ -482,11 +483,16 @@ Descripción: Lista los mensajes visibles para el usuario autenticado.
 Protegido: Sí
 Encabezado:
 Authorization: Bearer <token>
-Parámetros opcionales: conexionId, page, limit
+Parámetros opcionales: conexionId, desde, page, limit
 Ejemplo: GET /api/mensajes?conexionId=7&page=1&limit=20
+Ejemplo delta: GET /api/mensajes?conexionId=7&desde=31
 Nota: el orden es cronológico ascendente. Sin conexionId se listan los mensajes
 de todas las conexiones del usuario. Si la conexión indicada no existe o no le
 pertenece responde 404.
+Con "desde" se devuelven solo los mensajes con id mayor a ese valor, para que un
+cliente que sondea (alternativa a SSE) pida únicamente lo nuevo. En ese modo la
+respuesta no incluye "paginacion" y trae como máximo 50 mensajes: si llegan más,
+el cliente repite la consulta con el idMensaje más alto que haya recibido.
 Respuesta exitosa: 200 OK (data + paginacion)
 
 PATCH /api/mensajes/leidos
@@ -566,3 +572,56 @@ autenticado todavía no calificó el intercambio.
 
 Nota: el promedio también aparece como "calificacion" ({ promedio, total }) en
 GET /api/usuarios/:id y GET /api/usuarios/perfil.
+
+=========================================================
+10. EVENTOS EN TIEMPO REAL (SSE)
+=========================================================
+Canal Server-Sent Events (text/event-stream) con los avisos que le importan al
+usuario autenticado. Los eventos son un extra: la base de datos es la fuente de
+verdad y todo se puede recuperar con las rutas REST.
+Todas las rutas son privadas. EventSource no permite encabezados, así que el
+token se envía en la query (?token=<jwt>). Evita registrar la query en los logs
+de acceso del servidor.
+
+GET /api/eventos
+Descripción: Abre el flujo SSE. No consulta la base de datos.
+Protegido: Sí (por ?token=)
+Ejemplo: GET /api/eventos?token=<jwt>
+Encabezados de respuesta:
+Content-Type: text/event-stream
+Cache-Control: no-cache, no-transform
+Connection: keep-alive
+X-Accel-Buffering: no
+Contenido inicial: "retry: 5000" y el evento "conectado" con
+{ idUsuario, intervaloLatidoMs }.
+Latido: comentario ": ping" cada 30 segundos (no dispara eventos en el cliente).
+Límite: 3 conexiones simultáneas por usuario; por encima responde 429.
+Nota: al cerrar el cliente se libera la suscripción y se detiene el latido.
+
+Eventos emitidos (todos con data en JSON):
+  conectado    -> al abrir el flujo: idUsuario, intervaloLatidoMs
+  mensaje      -> idMensaje, idConexion, remitente, contenido, fechaEnvio
+  solicitud    -> idSolicitud, estado (idConexion al aceptar)
+  conexion     -> idConexion, estado, fechaInicio
+  calificacion -> idCalificacion, idConexion, puntuacion, calificador
+  feed         -> motivo: mensaje | solicitud | conexion | calificacion
+
+GET /api/eventos/feed
+Descripción: Resumen de notificaciones del usuario (se consulta al conectar y
+cada vez que llega un evento "feed").
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Ejemplo: GET /api/eventos/feed
+Respuesta exitosa: 200 OK
+(data: actualizadoEn, total, solicitudesPendientes, mensajesNoLeidos,
+ pendientesDeCalificar)
+Nota: "total" es la suma de los totales de las tres secciones.
+El feed se deriva de datos existentes (no hay tabla de notificaciones):
+solicitudes pendientes recibidas, mensajes sin leer por conexión e intercambios
+finalizados que el usuario todavía no calificó.
+
+Alternativa sin SSE (sondeo delta):
+GET /api/eventos/feed cada cierto tiempo y, para la conversación abierta,
+GET /api/mensajes?conexionId=7&desde=<idMensaje> (sección 8), avanzando "desde"
+con el idMensaje más alto recibido.

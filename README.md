@@ -321,6 +321,10 @@ npm run db:migrate -- --aplicar  # aplica los cambios pendientes
 
 Las migraciones de `database/migrations/` comprueban antes de crear la restricción, por lo que se pueden ejecutar varias veces sin duplicarla ni generar errores.
 
+La migración `002_idx_mensaje_conexion_mensaje.sql` añade el índice `(id_conexion, id_mensaje)` que acelera el sondeo delta de la mensajería (`GET /api/mensajes?desde=`). Es opcional para el funcionamiento: sin ella las consultas siguen siendo correctas, solo más lentas cuando la tabla `mensaje` crezca. También es idempotente, así que se puede aplicar varias veces.
+
+> Si usas npm 11 o superior, `npm run db:migrate -- --aplicar` puede descartar el argumento con un aviso `Unknown cli config "--aplicar"`. En ese caso ejecuta el script directamente: `node scripts/migrar.js --aplicar`.
+
 ### Autenticación y usuarios
 
 El módulo de autenticación permite registrar usuarios, iniciar sesión y generar un token JWT. Las contraseñas se almacenan cifradas mediante bcrypt, por lo que nunca se guardan en texto plano.
@@ -876,6 +880,79 @@ Al consultar las calificaciones recibidas, la respuesta agrega el resumen:
 }
 ```
 
+### Notificaciones en tiempo real (SSE)
+
+El backend expone un canal **Server-Sent Events** para avisar de los cambios que le importan a cada usuario sin que el cliente tenga que preguntar cada pocos segundos. La notificación es siempre un **extra**: la base de datos es la única fuente de verdad y todo se puede recuperar con las rutas REST normales.
+
+| Método | Ruta               | Protegido | Descripción                                              |
+| ------ | ------------------ | --------- | -------------------------------------------------------- |
+| `GET`  | `/api/eventos`       | Sí        | Abre el flujo SSE (`text/event-stream`)                   |
+| `GET`  | `/api/eventos/feed`  | Sí        | Devuelve el resumen de notificaciones en formato REST     |
+
+`GET /api/eventos` no consulta la base de datos: responde con los encabezados del flujo, la espera de reconexión (`retry: 5000`) y un evento `conectado`. El cliente pide el estado con `GET /api/eventos/feed` (al conectar y cada vez que recibe un evento `feed`).
+
+El feed se **deriva** de datos existentes, sin tabla de notificaciones: solicitudes pendientes recibidas, mensajes sin leer agrupados por conexión e intercambios finalizados que el usuario todavía no calificó.
+
+```json
+{
+  "success": true,
+  "message": "Feed de notificaciones consultado correctamente.",
+  "data": {
+    "actualizadoEn": "2026-11-12T15:30:00.000Z",
+    "total": 3,
+    "solicitudesPendientes": {
+      "total": 1,
+      "items": [
+        {
+          "idSolicitud": 12,
+          "emisor": { "idUsuario": 4, "nombres": "Ana", "apellidos": "Gómez", "alias": "anag" },
+          "mensajeInicial": "Vi que también enseñas guitarra.",
+          "fechaEnvio": "2026-11-12T14:00:00.000Z"
+        }
+      ]
+    },
+    "mensajesNoLeidos": {
+      "total": 2,
+      "porConexion": [{ "idConexion": 7, "total": 2 }]
+    },
+    "pendientesDeCalificar": {
+      "total": 0,
+      "items": []
+    }
+  }
+}
+```
+
+Eventos que puede enviar el flujo, todos con `data` en JSON:
+
+| Evento        | Cuándo se emite                                        | `data` mínimo                                        |
+| ------------- | ------------------------------------------------------ | ---------------------------------------------------- |
+| `conectado`   | Al abrir el flujo                                      | `idUsuario`, `intervaloLatidoMs`                     |
+| `mensaje`     | Otro participante escribe en una conexión activa       | `idMensaje`, `idConexion`, `remitente`, `contenido`, `fechaEnvio` |
+| `solicitud`   | Se crea, acepta, rechaza o cancela una solicitud       | `idSolicitud`, `estado` (`idConexion` al aceptar)    |
+| `conexion`    | El interlocutor finaliza el intercambio                | `idConexion`, `estado`, `fechaInicio`                |
+| `calificacion`| La otra persona califica el intercambio                | `idCalificacion`, `idConexion`, `puntuacion`, `calificador` |
+| `feed`        | Cambió el feed del usuario                             | `motivo` (`mensaje`, `solicitud`, `conexion`, `calificacion`) |
+
+Ejemplo de trama recibida al enviar un mensaje:
+
+```text
+event: mensaje
+data: {"idMensaje":31,"idConexion":7,"remitente":{"idUsuario":4,"nombres":"Ana","apellidos":"Gómez","alias":"anag"},"contenido":"Hola","fechaEnvio":"2026-11-12T15:30:00.000Z"}
+```
+
+Detalles de la implementación y limitaciones asumidas:
+
+- **Token en la query.** `EventSource` no permite enviar encabezados, así que el flujo se autentica con `GET /api/eventos?token=<jwt>`. Es la única opción con SSE, pero el token queda en los logs de acceso. Mitigación recomendada al desplegar: desactivar el registro de la query string, servir HTTPS y valorar una cookie `httpOnly` o un token de corta vida para el flujo.
+- **Latido cada 30 segundos.** Cada conexión recibe un comentario `: ping` para que proxies y balanceadores no la corten por inactividad. El intervalo se limpia al cerrar la conexión y no mantiene vivo el proceso.
+- **Limpieza al cerrar.** Cuando el cliente corta el flujo se borra su suscripción y se detiene el latido, así que el registro en memoria no crece. Las conexiones que ya no aceptan escrituras se descartan en el momento de emitir.
+- **Máximo 3 conexiones por usuario.** Por encima se responde `429`. Con HTTP/1.1 el navegador limita a unas 6 conexiones por dominio, así que conviene abrir **una sola** conexión por usuario y compartirla entre pestañas con `BroadcastChannel` (o mover el envío a un *service worker*). Si se necesita más, habría que reconsiderar WebSocket.
+- **Unidireccional.** SSE solo permite servidor → cliente; los envíos siguen siendo `POST` normales. **No se ha podido verificar si el host de despliegue sirve HTTP/2**; se asume HTTP/1.1, donde el límite de conexiones del navegador es el descrito arriba.
+- **Escalamiento.** El registro de conexiones vive en el proceso. Con varias instancias habría que emitir a través de un bus compartido (por ejemplo Redis pub/sub); con una sola instancia es suficiente.
+- **Alternativa por sondeo delta.** Un cliente que no pueda usar `EventSource` puede preguntar `GET /api/eventos/feed` cada cierto tiempo y, para la conversación abierta, `GET /api/mensajes?conexionId=7&desde=<idMensaje>`: devuelve solo los mensajes posteriores a ese `idMensaje`, sin paginación y como máximo 50 por consulta (si hay más, se repite con el id más alto recibido).
+
+
+### Variables de entorno del backend
 
 Además de las variables de conexión a la base de datos, el backend utiliza las siguientes variables:
 
@@ -937,13 +1014,14 @@ npm run test:watch  # vuelve a ejecutar al guardar cambios
 Qué cubre la suite:
 
 - Validación de la configuración del entorno (`tests/config/env.test.js`): variables obligatorias, puertos, `JWT_SECRET` y `JWT_EXPIRES_IN`, mensajes de error agregados y advertencias.
-- Autenticación (`tests/middlewares/autenticacion.test.js`): formato del encabezado `Authorization`, tokens válidos, expirados, firmados con otro secreto o sin firma, y autorización de administrador.
+- Autenticación (`tests/middlewares/autenticacion.test.js`): formato del encabezado `Authorization`, tokens válidos, expirados, firmados con otro secreto o sin firma, autorización de administrador y el token por query de SSE (`autenticarEvento`: ausente, vacío, repetido, inválido y válido con espacios).
 - Manejo de errores (`tests/middlewares/errorHandler.test.js`) y rutas inexistentes (`tests/middlewares/notFound.test.js`).
 - Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores. Las solicitudes de conexión (`tests/modules/solicitudes.validation.test.js`), las conexiones (`tests/modules/conexiones.validation.test.js`), la mensajería (`tests/modules/mensajes.validation.test.js`) y las calificaciones (`tests/modules/calificaciones.validation.test.js`) cubren el receptor, el mensaje inicial, el contenido de los mensajes, la puntuación, el comentario, los filtros de estado y los identificadores.
 - Utilidades de listados (`tests/utils/consulta.test.js`): valores por defecto de `page` y `limit`, metadatos de paginación y validación de filtros de texto, identificadores y valores cerrados (`estado`, `orden`).
-- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`, `conexionId`), el 401 de las ocho rutas de habilidades del usuario, el 401 de las diez rutas de solicitudes y conexiones, el 401 de las cuatro rutas de mensajería y el 401 de las tres rutas de calificaciones.
+- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`, `conexionId`, `desde`), el 401 de las ocho rutas de habilidades del usuario, el 401 de las diez rutas de solicitudes y conexiones, el 401 de las cuatro rutas de mensajería, el 401 de las dos rutas de eventos y el 401 de las tres rutas de calificaciones. También se abre un flujo SSE real: se comprueban los encabezados, el evento `conectado`, el límite de conexiones (`429`) y que la suscripción se libera al cerrar el cliente.
+- Eventos en tiempo real (`tests/modules/eventos.registro.test.js`): entrega de eventos al destinatario, formato de las tramas, latido con temporizadores simulados (a los 30 segundos y detenido al cerrar), límite de conexiones por usuario y descarte de conexiones muertas.
 
-La suite completa suma 176 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
+La suite completa suma 196 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
 
 El archivo `tests/entorno-pruebas.js` define variables de entorno mínimas para que las pruebas puedan cargar la configuración sin depender de un `.env` específico.
 
@@ -1070,7 +1148,7 @@ npm -v
 ## Configuración de la base de datos
 
 1. Crea la base de datos en MariaDB o MySQL.
-2. Ejecuta `database/shema.sql` para crear las tablas (incluye la restricción única de habilidades por categoría).
+2. Ejecuta `database/shema.sql` para crear las tablas (incluye la restricción única de habilidades por categoría y el índice `idx_mensaje_conexion_mensaje` de la mensajería).
 3. Ejecuta `database/seed.sql` para cargar los roles (1 = usuario, 2 = administrador) y los datos iniciales. Ambos scripts se pueden volver a ejecutar sin duplicar datos.
 4. Si la base de datos ya existía antes de esta versión, aplica las migraciones pendientes:
 

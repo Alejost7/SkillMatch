@@ -47,7 +47,8 @@ export async function create(idConexion, idRemitente, contenido) {
 
 // Construye el WHERE de los listados: el usuario debe ser participante de la
 // conexión y, cuando se indica, el mensaje debe pertenecer a esa conexión.
-function crearFiltros({ idUsuario, idConexion }) {
+// "desde" añade el filtro delta por identificador de mensaje.
+function crearFiltros({ idUsuario, idConexion, desde }) {
     const condiciones = [
         '(s.id_usuario_emisor = ? OR s.id_usuario_receptor = ?)'
     ];
@@ -58,24 +59,37 @@ function crearFiltros({ idUsuario, idConexion }) {
         valores.push(idConexion);
     }
 
+    if (desde) {
+        condiciones.push('m.id_mensaje > ?');
+        valores.push(desde);
+    }
+
     return { where: `WHERE ${condiciones.join(' AND ')}`, valores };
 }
 
 // Busca los mensajes visibles para el usuario con paginación.
 // El orden es cronológico ascendente para que el cliente pinte la conversación
-// tal como se lee. LIMIT y OFFSET llegan como enteros ya validados.
+// tal como se lee. Con "desde" se ordena por identificador: el sondeo delta
+// solo necesita los mensajes nuevos y ambos órdenes coinciden porque
+// fecha_envio la asigna el servidor al insertar.
+// LIMIT y OFFSET llegan como enteros ya validados.
 export async function buscar({
     idUsuario,
     idConexion,
+    desde,
     limite,
     desplazamiento
 }) {
-    const { where, valores } = crearFiltros({ idUsuario, idConexion });
+    const { where, valores } = crearFiltros({ idUsuario, idConexion, desde });
+
+    const orden = desde
+        ? 'ORDER BY m.id_mensaje ASC'
+        : 'ORDER BY m.fecha_envio ASC, m.id_mensaje ASC';
 
     const [rows] = await pool.execute(
         `${COLUMNAS_MENSAJE}
         ${where}
-        ORDER BY m.fecha_envio ASC, m.id_mensaje ASC
+        ${orden}
         LIMIT ${limite} OFFSET ${desplazamiento}`,
         valores
     );

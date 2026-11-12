@@ -10,6 +10,7 @@ import solicitudesRoutes from './modules/solicitudes/solicitudes.routes.js';
 import conexionesRoutes from './modules/conexiones/conexiones.routes.js';
 import mensajesRoutes from './modules/mensajes/mensajes.routes.js';
 import calificacionesRoutes from './modules/calificaciones/calificaciones.routes.js';
+import eventosRoutes from './modules/eventos/eventos.routes.js';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/solicitudes', solicitudesRoutes);
 app.use('/api/conexiones', conexionesRoutes);
 app.use('/api/mensajes', mensajesRoutes);
 app.use('/api/calificaciones', calificacionesRoutes);
+app.use('/api/eventos', eventosRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

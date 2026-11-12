@@ -3,6 +3,7 @@
 
 import * as conexionesRepository from './conexiones.repository.js';
 import * as mensajesRepository from '../mensajes/mensajes.repository.js';
+import * as eventosRegistro from '../eventos/eventos.registro.js';
 import { mapearConexionParaUsuario } from './conexiones.mapper.js';
 import { construirPaginacion } from '../../utils/consulta.js';
 
@@ -111,8 +112,23 @@ export async function finalizarConexion(idUsuario, idConexion) {
 
     const conexion = await conexionesRepository.findById(idConexion);
 
-    return agregarNoLeidos(
+    const mapeada = await agregarNoLeidos(
         mapearConexionParaUsuario(conexion, idUsuario),
         idUsuario
     );
+
+    // Solo se avisa al interlocutor: quien finalizó ya conoce el resultado.
+    eventosRegistro.emitirA(mapeada.interlocutor.idUsuario, 'conexion', {
+        idConexion: mapeada.idConexion,
+        estado: mapeada.estado,
+        fechaInicio: mapeada.fechaInicio
+    });
+
+    // El interlocutor tiene un intercambio finalizado pendiente de calificar.
+    eventosRegistro.emitirA(mapeada.interlocutor.idUsuario, 'feed', {
+        motivo: 'conexion',
+        idConexion: mapeada.idConexion
+    });
+
+    return mapeada;
 }

@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../../src/config/env.js';
 import {
     autenticar,
+    autenticarEvento,
     autorizarAdministrador
 } from '../../src/middlewares/autenticacion.js';
 import { crearReq, crearRes, ejecutarMiddleware } from '../helpers/fakes.js';
@@ -102,6 +103,59 @@ test('conserva el rol administrador en req.usuario', () => {
 
     assert.equal(req.usuario.rol, 'administrador');
     assert.equal(req.usuario.idRol, 2);
+});
+
+test('autenticarEvento exige el token en la query', () => {
+    // Sin parámetro, vacío o repetido (?token=a&token=b) no hay token válido.
+    const casos = [{}, { token: '' }, { token: '   ' }, { token: ['a', 'b'] }];
+
+    for (const query of casos) {
+        const res = crearRes();
+
+        const continuo = ejecutarMiddleware(
+            autenticarEvento,
+            crearReq({ query }),
+            res
+        );
+
+        assert.equal(continuo, false);
+        assert.equal(res.statusCode, 401);
+        assert.equal(
+            res.body.message,
+            'No se proporcionó un token de autenticación.'
+        );
+    }
+});
+
+test('autenticarEvento rechaza un token inválido', () => {
+    const res = crearRes();
+
+    const continuo = ejecutarMiddleware(
+        autenticarEvento,
+        crearReq({ query: { token: 'token-invalido' } }),
+        res
+    );
+
+    assert.equal(continuo, false);
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body.message, 'Token inválido o expirado.');
+});
+
+test('autenticarEvento acepta un token válido de la query', () => {
+    // Con espacios alrededor, el token se recorta antes de verificarlo.
+    const req = crearReq({ query: { token: `  ${firmar()}  ` } });
+    const res = crearRes();
+
+    const continuo = ejecutarMiddleware(autenticarEvento, req, res);
+
+    assert.equal(continuo, true);
+    assert.equal(res.statusCode, null);
+    assert.deepEqual(req.usuario, {
+        idUsuario: 7,
+        idRol: 1,
+        rol: 'usuario',
+        correoElectronico: 'ana@example.com'
+    });
 });
 
 test('rechaza un token firmado con otro secreto', () => {

@@ -5,19 +5,30 @@
 import * as mensajesService from './mensajes.service.js';
 
 // GET /api/mensajes?conexionId=1&page=1&limit=10
+// Con ?desde=<idMensaje> devuelve solo los mensajes nuevos, sin paginación.
 export async function listarMensajes(req, res, next) {
     try {
-        const { mensajes, paginacion } =
-            await mensajesService.listarMensajes(
-                req.usuario.idUsuario,
-                res.locals.busquedaMensajes
-            );
+        const resultado = await mensajesService.listarMensajes(
+            req.usuario.idUsuario,
+            res.locals.busquedaMensajes
+        );
+
+        // Modo delta: el cliente solo necesita los mensajes y el punto de
+        // partida usado, para volver a preguntar con el id más alto.
+        if (resultado.desde) {
+            return res.status(200).json({
+                success: true,
+                message: 'Mensajes nuevos consultados correctamente.',
+                data: resultado.mensajes,
+                desde: resultado.desde
+            });
+        }
 
         return res.status(200).json({
             success: true,
             message: 'Mensajes consultados correctamente.',
-            data: mensajes,
-            paginacion
+            data: resultado.mensajes,
+            paginacion: resultado.paginacion
         });
     } catch (error) {
         next(error);

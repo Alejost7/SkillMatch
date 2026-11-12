@@ -12,6 +12,63 @@ const MENSAJE_FORMATO_INVALIDO =
     'El formato del token no es válido. Usa: Bearer <token>.';
 const MENSAJE_TOKEN_INVALIDO = 'Token inválido o expirado.';
 
+// Responde 401 con el mensaje indicado.
+function responderNoAutorizado(res, message) {
+    return res.status(401).json({ success: false, message });
+}
+
+/**
+ * Verifica un token JWT y devuelve su contenido, o null si no es utilizable.
+ *
+ * Se expone para poder verificar el token en contextos donde no hay header
+ * Authorization (por ejemplo, el parámetro ?token= de SSE).
+ */
+export function verificarToken(token) {
+    try {
+        // Verificamos firma, expiración y algoritmo permitido.
+        // Fijar el algoritmo evita que un token pueda declarar "alg: none".
+        const payload = jwt.verify(token, env.jwt.secret, {
+            algorithms: ['HS256']
+        });
+
+        // El token debe identificar a un usuario mediante un entero positivo.
+        const idUsuario = Number(payload.idUsuario);
+
+        if (!Number.isSafeInteger(idUsuario) || idUsuario <= 0) {
+            return null;
+        }
+
+        return payload;
+    } catch {
+        // Token inválido, manipulado o expirado.
+        return null;
+    }
+}
+
+/**
+ * Completa la autenticación a partir de un token ya extraído.
+ * Guarda el usuario en req.usuario y continúa la cadena de middlewares.
+ */
+function iniciarSesion(req, res, next, token) {
+    const payload = verificarToken(token);
+
+    if (!payload) {
+        return responderNoAutorizado(res, MENSAJE_TOKEN_INVALIDO);
+    }
+
+    // Guardamos la información del usuario autenticado en la petición.
+    // Así, los controladores posteriores pueden saber qué usuario hace la petición.
+    req.usuario = {
+        idUsuario: Number(payload.idUsuario),
+        idRol: payload.idRol ?? null,
+        rol: payload.rol ?? null,
+        correoElectronico: payload.correoElectronico ?? null
+    };
+
+    // Continuamos con el siguiente middleware o controlador.
+    return next();
+}
+
 /**
  * Middleware que verifica si el cliente envió un token JWT válido.
  *
@@ -28,10 +85,7 @@ export function autenticar(req, res, next) {
 
     // Si no existe el header, el usuario no envió token.
     if (!header) {
-        return res.status(401).json({
-            success: false,
-            message: MENSAJE_SIN_TOKEN
-        });
+        return responderNoAutorizado(res, MENSAJE_SIN_TOKEN);
     }
 
     // El formato esperado es: "Bearer token".
@@ -40,50 +94,33 @@ export function autenticar(req, res, next) {
     // Verificamos que tenga dos partes, que la primera sea "Bearer" y que el
     // token no esté vacío.
     if (partes.length !== 2 || partes[0] !== 'Bearer' || !partes[1].trim()) {
-        return res.status(401).json({
-            success: false,
-            message: MENSAJE_FORMATO_INVALIDO
-        });
+        return responderNoAutorizado(res, MENSAJE_FORMATO_INVALIDO);
     }
 
-    // Extraemos el token.
-    const token = partes[1];
+    return iniciarSesion(req, res, next, partes[1]);
+}
 
-    try {
-        // Verificamos firma, expiración y algoritmo permitido.
-        // Fijar el algoritmo evita que un token pueda declarar "alg: none".
-        const payload = jwt.verify(token, env.jwt.secret, {
-            algorithms: ['HS256']
-        });
+/**
+ * Autenticación para EventSource (SSE).
+ *
+ * El navegador crea EventSource sin poder enviar headers, así que el token
+ * viaja como parámetro de consulta: GET /api/eventos?token=<jwt>.
+ * Las comprobaciones son exactamente las mismas que en autenticar().
+ *
+ * Advertencia: los parámetros de consulta quedan en los logs de acceso. Se
+ * acepta solo por ser el único mecanismo de EventSource; la cookie httpOnly o
+ * un token de vida corta son la alternativa si el proyecto la adopta.
+ */
+export function autenticarEvento(req, res, next) {
+    const valor = req.query?.token;
+    const token = typeof valor === 'string' ? valor.trim() : '';
 
-        // El token debe identificar a un usuario mediante un entero positivo.
-        const idUsuario = Number(payload.idUsuario);
-
-        if (!Number.isSafeInteger(idUsuario) || idUsuario <= 0) {
-            return res.status(401).json({
-                success: false,
-                message: MENSAJE_TOKEN_INVALIDO
-            });
-        }
-
-        // Guardamos la información del usuario autenticado en la petición.
-        // Así, los controladores posteriores pueden saber qué usuario hace la petición.
-        req.usuario = {
-            idUsuario,
-            idRol: payload.idRol ?? null,
-            rol: payload.rol ?? null,
-            correoElectronico: payload.correoElectronico ?? null
-        };
-
-        // Continuamos con el siguiente middleware o controlador.
-        return next();
-    } catch (error) {
-        // Si el token es inválido, está manipulado o expiró, denegamos el acceso.
-        return res.status(401).json({
-            success: false,
-            message: MENSAJE_TOKEN_INVALIDO
-        });
+    // typeof descarta arrays (por ejemplo ?token=a&token=b).
+    if (!token) {
+        return responderNoAutorizado(res, MENSAJE_SIN_TOKEN);
     }
+
+    return iniciarSesion(req, res, next, token);
 }
 
 /**

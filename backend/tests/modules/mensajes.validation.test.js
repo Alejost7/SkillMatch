@@ -108,7 +108,7 @@ test('validarFiltrosMensajes aplica los valores por defecto', () => {
 
     assert.equal(continuo, true);
     assert.deepEqual(res.locals.busquedaMensajes, {
-        filtros: { idConexion: undefined },
+        filtros: { idConexion: undefined, desde: undefined },
         pagina: 1,
         limite: 10,
         desplazamiento: 0
@@ -126,11 +126,50 @@ test('validarFiltrosMensajes normaliza la conexión y la paginación', () => {
 
     assert.equal(continuo, true);
     assert.deepEqual(res.locals.busquedaMensajes, {
-        filtros: { idConexion: 4 },
+        filtros: { idConexion: 4, desde: undefined },
         pagina: 2,
         limite: 5,
         desplazamiento: 5
     });
+});
+
+test('validarFiltrosMensajes acepta el sondeo delta con desde', () => {
+    const res = crearRes();
+
+    const continuo = ejecutarMiddleware(
+        validarFiltrosMensajes,
+        crearReq({ query: { conexionId: '4', desde: '128' } }),
+        res
+    );
+
+    assert.equal(continuo, true);
+    assert.equal(res.locals.busquedaMensajes.filtros.desde, 128);
+    assert.equal(res.locals.busquedaMensajes.filtros.idConexion, 4);
+});
+
+test('validarFiltrosMensajes rechaza un desde que no es entero positivo', () => {
+    for (const desde of ['abc', '0', '-3', '1.5', '']) {
+        const res = crearRes();
+
+        const continuo = ejecutarMiddleware(
+            validarFiltrosMensajes,
+            crearReq({ query: { desde } }),
+            res
+        );
+
+        // El parámetro vacío se ignora, igual que en el resto de filtros.
+        if (desde === '') {
+            assert.equal(continuo, true);
+            assert.equal(res.locals.busquedaMensajes.filtros.desde, undefined);
+            continue;
+        }
+
+        assert.equal(continuo, false);
+        assert.equal(res.statusCode, 400);
+        assert.deepEqual(res.body.errors, [
+            'El parámetro desde debe ser un entero positivo válido.'
+        ]);
+    }
 });
 
 test('validarFiltrosMensajes reporta filtros y paginación inválidos', () => {

@@ -5,6 +5,7 @@
 import * as calificacionesRepository from './calificaciones.repository.js';
 import * as conexionesRepository from '../conexiones/conexiones.repository.js';
 import * as usuariosRepository from '../usuarios/usuarios.repository.js';
+import * as eventosRegistro from '../eventos/eventos.registro.js';
 import { mapearCalificacionParaUsuario } from './calificaciones.mapper.js';
 import { construirPaginacion } from '../../utils/consulta.js';
 
@@ -118,7 +119,23 @@ export async function crearCalificacion(
             comentario
         });
 
-        return mapearCalificacionParaUsuario(fila, idUsuario);
+        const calificacion = mapearCalificacionParaUsuario(fila, idUsuario);
+
+        // La persona calificada ve su reputación actualizada en vivo.
+        eventosRegistro.emitirA(idCalificado, 'calificacion', {
+            idCalificacion: calificacion.idCalificacion,
+            idConexion: calificacion.idConexion,
+            puntuacion: calificacion.puntuacion,
+            calificador: calificacion.calificador
+        });
+
+        // Ya no tiene un intercambio pendiente de calificar.
+        eventosRegistro.emitirA(idCalificado, 'feed', {
+            motivo: 'calificacion',
+            idConexion: calificacion.idConexion
+        });
+
+        return calificacion;
     } catch (error) {
         // La clave única protege ante dos envíos simultáneos.
         if (error.code === 'ER_DUP_ENTRY') {

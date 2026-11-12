@@ -5,6 +5,7 @@
 import * as solicitudesRepository from './solicitudes.repository.js';
 import * as conexionesRepository from '../conexiones/conexiones.repository.js';
 import * as usuariosRepository from '../usuarios/usuarios.repository.js';
+import * as eventosRegistro from '../eventos/eventos.registro.js';
 import { mapearSolicitud } from './solicitudes.mapper.js';
 import { mapearConexion } from '../conexiones/conexiones.mapper.js';
 import { construirPaginacion } from '../../utils/consulta.js';
@@ -19,6 +20,26 @@ function crearError(status, message) {
     const error = new Error(message);
     error.status = status;
     return error;
+}
+
+// Avisa por SSE al otro participante de un cambio en una solicitud.
+// Se llama solo después de que la base confirmó el cambio: la notificación es
+// un extra en tiempo real, nunca la fuente de verdad.
+function notificarSolicitud(idDestinatario, solicitud, extra = {}) {
+    eventosRegistro.emitirA(idDestinatario, 'solicitud', {
+        idSolicitud: solicitud.idSolicitud,
+        estado: solicitud.estado,
+        emisor: solicitud.emisor,
+        receptor: solicitud.receptor,
+        fechaEnvio: solicitud.fechaEnvio,
+        ...extra
+    });
+
+    // El contador de solicitudes pendientes del destinatario cambió.
+    eventosRegistro.emitirA(idDestinatario, 'feed', {
+        motivo: 'solicitud',
+        idSolicitud: solicitud.idSolicitud
+    });
 }
 
 // Envía una solicitud de conexión a otro usuario.
@@ -58,7 +79,12 @@ export async function crearSolicitud(idUsuarioEmisor, datos) {
 
     const fila = await solicitudesRepository.create(idUsuarioEmisor, datos);
 
-    return mapearSolicitud(fila);
+    const solicitud = mapearSolicitud(fila);
+
+    // Quien recibe la solicitud es el interesado en saberlo.
+    notificarSolicitud(receptor.id_usuario, solicitud);
+
+    return solicitud;
 }
 
 // Lista las solicitudes recibidas o enviadas por el usuario autenticado.
@@ -162,9 +188,17 @@ export async function aceptarSolicitud(idUsuario, idSolicitud) {
         conexionesRepository.findById(creada.idConexion)
     ]);
 
+    const mapeada = mapearSolicitud(solicitud);
+    const conexionMapeada = mapearConexion(conexion);
+
+    // Quien envió la solicitud espera la respuesta.
+    notificarSolicitud(mapeada.emisor.idUsuario, mapeada, {
+        idConexion: conexionMapeada.idConexion
+    });
+
     return {
-        solicitud: mapearSolicitud(solicitud),
-        conexion: mapearConexion(conexion)
+        solicitud: mapeada,
+        conexion: conexionMapeada
     };
 }
 
@@ -189,7 +223,14 @@ export async function rechazarSolicitud(idUsuario, idSolicitud) {
         throw crearError(409, MENSAJE_YA_RESPONDIDA);
     }
 
-    return mapearSolicitud(await solicitudesRepository.findById(idSolicitud));
+    const solicitud = mapearSolicitud(
+        await solicitudesRepository.findById(idSolicitud)
+    );
+
+    // Quien envió la solicitud espera la respuesta.
+    notificarSolicitud(solicitud.emisor.idUsuario, solicitud);
+
+    return solicitud;
 }
 
 // Cancela una solicitud pendiente. Solo puede hacerlo el emisor.
@@ -213,5 +254,12 @@ export async function cancelarSolicitud(idUsuario, idSolicitud) {
         throw crearError(409, MENSAJE_YA_RESPONDIDA);
     }
 
-    return mapearSolicitud(await solicitudesRepository.findById(idSolicitud));
+    const solicitud = mapearSolicitud(
+        await solicitudesRepository.findById(idSolicitud)
+    );
+
+    // Quien recibió la solicitud ya no necesita responderla.
+    notificarSolicitud(solicitud.receptor.idUsuario, solicitud);
+
+    return solicitud;
 }

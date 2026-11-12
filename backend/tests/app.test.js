@@ -12,6 +12,9 @@ const { default: app } = await import('../src/app.js');
 const { pool } = await import('../src/config/database.js');
 const { default: jwt } = await import('jsonwebtoken');
 const { env } = await import('../src/config/env.js');
+const { contarSuscriptores, cerrarTodos } = await import(
+    '../src/modules/eventos/eventos.registro.js'
+);
 
 // Firma un token válido para ejercitar las rutas protegidas.
 function firmarToken({ idRol, rol }) {
@@ -56,6 +59,9 @@ before(async () => {
 });
 
 after(async () => {
+    // Una conexión SSE abierta impediría que el servidor termine de cerrarse.
+    cerrarTodos();
+
     const cerrado = once(servidor, 'close');
 
     servidor.close();
@@ -721,6 +727,148 @@ test('GET /api/calificaciones/usuario/1 valida la paginación', async () => {
     assert.equal(cuerpo.errors.length, 2);
     assert.ok(cuerpo.errors.some((error) => /page/.test(error)));
     assert.ok(cuerpo.errors.some((error) => /limit/.test(error)));
+});
+
+// Espera activa corta: el cierre del socket lo procesa el servidor de forma
+// asíncrona después de que el cliente cancele la lectura.
+async function esperarHasta(condicion, intentos = 100) {
+    for (let intento = 0; intento < intentos; intento += 1) {
+        if (condicion()) {
+            return true;
+        }
+
+        await new Promise((resolver) => setTimeout(resolver, 20));
+    }
+
+    return condicion();
+}
+
+test('las rutas de eventos están protegidas', async () => {
+    for (const ruta of ['/api/eventos', '/api/eventos/feed']) {
+        const { estado, cuerpo } = await pedir(ruta);
+
+        assert.equal(estado, 401, `${ruta} debe responder 401`);
+        assert.equal(
+            cuerpo.message,
+            'No se proporcionó un token de autenticación.'
+        );
+    }
+});
+
+test('GET /api/eventos rechaza un token inválido en la query', async () => {
+    const { estado, cuerpo } = await pedir('/api/eventos?token=token-invalido');
+
+    assert.equal(estado, 401);
+    assert.equal(cuerpo.message, 'Token inválido o expirado.');
+});
+
+test('GET /api/eventos ignora un token repetido en la query', async () => {
+    // ?token=a&token=b llega como arreglo: se trata como ausente.
+    const { estado, cuerpo } = await pedir(
+        `/api/eventos?token=${TOKEN_USUARIO}&token=${TOKEN_USUARIO}`
+    );
+
+    assert.equal(estado, 401);
+    assert.equal(
+        cuerpo.message,
+        'No se proporcionó un token de autenticación.'
+    );
+});
+
+test('GET /api/eventos/feed responde 401 con un token inválido', async () => {
+    const { estado, cuerpo } = await pedir(
+        '/api/eventos/feed?token=token-invalido'
+    );
+
+    assert.equal(estado, 401);
+    assert.equal(cuerpo.message, 'Token inválido o expirado.');
+});
+
+test('GET /api/mensajes valida el parámetro desde', async () => {
+    const { estado, cuerpo } = await pedir('/api/mensajes?desde=abc', {
+        headers: { authorization: `Bearer ${TOKEN_USUARIO}` }
+    });
+
+    assert.equal(estado, 400);
+    assert.deepEqual(cuerpo.errors, [
+        'El parámetro desde debe ser un entero positivo válido.'
+    ]);
+});
+
+test('GET /api/eventos abre un flujo SSE y lo limpia al cerrar', async (t) => {
+    t.after(async () => {
+        cerrarTodos();
+    });
+
+    const respuesta = await fetch(
+        `${urlBase}/api/eventos?token=${TOKEN_USUARIO}`
+    );
+
+    assert.equal(respuesta.status, 200);
+    assert.match(
+        respuesta.headers.get('content-type'),
+        /text\/event-stream/
+    );
+    // Sin este encabezado, Nginx almacenaría la respuesta y no habría eventos.
+    assert.equal(respuesta.headers.get('x-accel-buffering'), 'no');
+    assert.equal(respuesta.headers.get('cache-control'), 'no-cache, no-transform');
+
+    // El servidor registró la conexión del usuario del token (99).
+    assert.equal(contarSuscriptores(99), 1);
+
+    const lector = respuesta.body.getReader();
+    const decodificador = new TextDecoder();
+
+    let texto = '';
+
+    // El servidor puede enviar la bienvenida en uno o varios trozos.
+    while (!texto.includes('event: conectado')) {
+        const { value, done } = await lector.read();
+
+        if (done) {
+            break;
+        }
+
+        texto += decodificador.decode(value);
+    }
+
+    assert.match(texto, /retry: 5000/);
+    assert.match(texto, /event: conectado/);
+    assert.match(texto, /"idUsuario":99/);
+    assert.match(texto, /"intervaloLatidoMs":30000/);
+
+    // Al cerrar el cliente, el servidor debe borrar la suscripción y el latido.
+    await lector.cancel();
+
+    await esperarHasta(() => contarSuscriptores(99) === 0);
+
+    assert.equal(contarSuscriptores(99), 0);
+});
+
+test('GET /api/eventos responde 429 al superar el máximo de conexiones', async (t) => {
+    const abiertas = [];
+
+    t.after(async () => {
+        for (const abierta of abiertas) {
+            await abierta.body.cancel();
+        }
+
+        cerrarTodos();
+    });
+
+    for (let indice = 0; indice < 3; indice += 1) {
+        const abierta = await fetch(
+            `${urlBase}/api/eventos?token=${TOKEN_USUARIO}`
+        );
+
+        assert.equal(abierta.status, 200);
+        abiertas.push(abierta);
+    }
+
+    const cuarta = await pedir(`/api/eventos?token=${TOKEN_USUARIO}`);
+
+    assert.equal(cuarta.estado, 429);
+    assert.match(cuarta.cuerpo.message, /conexiones de eventos abiertas/);
 });
 
 
