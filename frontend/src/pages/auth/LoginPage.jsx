@@ -56,9 +56,15 @@ export default function LoginPage() {
         //   body: JSON.stringify(formData),
         // });
 
+        const respuesta = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(formData)
+        })
+
         console.log('Datos enviados:', formData);
         } catch (error) {
-        setMensajeError('No fue posible iniciar sesión. Intenta nuevamente.');
+        setMensajeError('No fue posible iniciar sesión. Por favor, intenta nuevamente.');
         } finally {
         setCargando(false);
         }
