@@ -6,13 +6,13 @@ import * as usuariosService from './usuarios.service.js';
 export async function obtenerPerfil(req, res, next) {
     try {
         const usuario = await usuariosService.obtenerPerfil(
-        req.usuario.idUsuario
+            req.usuario.idUsuario
         );
 
         return res.status(200).json({
-        success: true,
-        message: 'Perfil consultado correctamente.',
-        data: usuario
+            success: true,
+            message: 'Perfil consultado correctamente.',
+            data: usuario
         });
     } catch (error) {
         next(error);
@@ -23,13 +23,13 @@ export async function obtenerPerfil(req, res, next) {
 export async function obtenerUsuario(req, res, next) {
     try {
         const usuario = await usuariosService.obtenerUsuario(
-        res.locals.idUsuario
+            res.locals.idUsuario
         );
 
         return res.status(200).json({
-        success: true,
-        message: 'Usuario consultado correctamente.',
-        data: usuario
+            success: true,
+            message: 'Usuario consultado correctamente.',
+            data: usuario
         });
     } catch (error) {
         next(error);
@@ -40,14 +40,15 @@ export async function obtenerUsuario(req, res, next) {
 export async function actualizarPerfil(req, res, next) {
     try {
         const usuario = await usuariosService.actualizarPerfil(
-        req.usuario.idUsuario,
-        res.locals.datosUsuario
+            req.usuario.idUsuario,
+            res.locals.datosUsuario,
+            res.locals.datosPerfil
         );
 
         return res.status(200).json({
-        success: true,
-        message: 'Perfil actualizado correctamente.',
-        data: usuario
+            success: true,
+            message: 'Perfil actualizado correctamente.',
+            data: usuario
         });
     } catch (error) {
         next(error);

@@ -10,7 +10,7 @@ export function validarRegistro(req, res, next) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
         return res.status(400).json({
         success: false,
-        message: 'Debes enviar un objeto JSON.'
+        message: 'Por favor, debes enviar un objeto JSON.'
         });
     }
 

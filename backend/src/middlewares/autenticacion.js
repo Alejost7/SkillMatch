@@ -3,8 +3,14 @@
 
 import jwt from 'jsonwebtoken';
 
-// Cargamos las variables de entorno.
-import 'dotenv/config';
+import { env } from '../config/env.js';
+import { esAdministrador } from '../config/roles.js';
+
+// Mensajes de error reutilizados para que las respuestas sean consistentes.
+const MENSAJE_SIN_TOKEN = 'No se proporcionó un token de autenticación.';
+const MENSAJE_FORMATO_INVALIDO =
+    'El formato del token no es válido. Usa: Bearer <token>.';
+const MENSAJE_TOKEN_INVALIDO = 'Token inválido o expirado.';
 
 /**
  * Middleware que verifica si el cliente envió un token JWT válido.
@@ -23,20 +29,20 @@ export function autenticar(req, res, next) {
     // Si no existe el header, el usuario no envió token.
     if (!header) {
         return res.status(401).json({
-        success: false,
-        message: 'No se proporcionó un token de autenticación.'
+            success: false,
+            message: MENSAJE_SIN_TOKEN
         });
     }
 
     // El formato esperado es: "Bearer token".
-    // Por eso separamos el texto por espacios.
     const partes = header.split(' ');
 
-    // Verificamos que tenga dos partes y que la primera sea "Bearer".
-    if (partes.length !== 2 || partes[0] !== 'Bearer') {
+    // Verificamos que tenga dos partes, que la primera sea "Bearer" y que el
+    // token no esté vacío.
+    if (partes.length !== 2 || partes[0] !== 'Bearer' || !partes[1].trim()) {
         return res.status(401).json({
-        success: false,
-        message: 'El formato del token no es válido. Usa: Bearer <token>.'
+            success: false,
+            message: MENSAJE_FORMATO_INVALIDO
         });
     }
 
@@ -44,52 +50,65 @@ export function autenticar(req, res, next) {
     const token = partes[1];
 
     try {
-        // Verificamos que el token sea válido y no haya expirado.
-        // jwt.verify lanza un error si el token es inválido o está expirado.
-        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        // Verificamos firma, expiración y algoritmo permitido.
+        // Fijar el algoritmo evita que un token pueda declarar "alg: none".
+        const payload = jwt.verify(token, env.jwt.secret, {
+            algorithms: ['HS256']
+        });
+
+        // El token debe identificar a un usuario mediante un entero positivo.
+        const idUsuario = Number(payload.idUsuario);
+
+        if (!Number.isSafeInteger(idUsuario) || idUsuario <= 0) {
+            return res.status(401).json({
+                success: false,
+                message: MENSAJE_TOKEN_INVALIDO
+            });
+        }
 
         // Guardamos la información del usuario autenticado en la petición.
         // Así, los controladores posteriores pueden saber qué usuario hace la petición.
         req.usuario = {
-        idUsuario: payload.idUsuario,
-        idRol: payload.idRol,
-        correoElectronico: payload.correoElectronico
+            idUsuario,
+            idRol: payload.idRol ?? null,
+            rol: payload.rol ?? null,
+            correoElectronico: payload.correoElectronico ?? null
         };
 
         // Continuamos con el siguiente middleware o controlador.
-        next();
+        return next();
     } catch (error) {
         // Si el token es inválido, está manipulado o expiró, denegamos el acceso.
         return res.status(401).json({
-        success: false,
-        message: 'Token inválido o expirado.'
+            success: false,
+            message: MENSAJE_TOKEN_INVALIDO
         });
     }
 }
 
 /**
- * Middleware opcional para proteger rutas exclusivas de administrador.
+ * Middleware para proteger rutas exclusivas de administrador.
  * Debe usarse después de autenticar.
  */
 export function autorizarAdministrador(req, res, next) {
     // Verificamos que exista un usuario autenticado.
     if (!req.usuario) {
         return res.status(401).json({
-        success: false,
-        message: 'Debes iniciar sesión para acceder a este recurso.'
+            success: false,
+            message: 'Debes iniciar sesión para acceder a este recurso.'
         });
     }
 
-    // El rol 1 corresponde a administrador según los datos iniciales.
-    if (req.usuario.idRol !== 1) {
+    // Se acepta el nombre del rol (preferido) o el identificador documentado.
+    if (!esAdministrador(req.usuario)) {
         return res.status(403).json({
-        success: false,
-        message: 'No tienes permisos para realizar esta acción.'
+            success: false,
+            message: 'No tienes permisos para realizar esta acción.'
         });
     }
 
     // Si el usuario es administrador, continuamos.
-    next();
+    return next();
 }
 
 // 401 Unauthorized: no se envia token o el token es inválido.
