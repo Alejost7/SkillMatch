@@ -2,7 +2,7 @@
 
 SkillMatch es una plataforma web orientada al intercambio no monetario de conocimientos y habilidades. Permite que las personas publiquen habilidades que pueden enseñar, registren habilidades que desean aprender, busquen coincidencias, envíen solicitudes de conexión, se comuniquen y califiquen las experiencias de intercambio.
 
-Actualmente, el proyecto implementa los módulos de gestión de categorías, gestión de habilidades, autenticación y usuarios en el backend. Estos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento, las habilidades asociadas a cada categoría, el registro de usuarios, el inicio de sesión y la consulta o actualización del perfil del usuario autenticado.
+Actualmente, el proyecto implementa en el backend los módulos de gestión de categorías, gestión de habilidades, autenticación, usuarios, habilidades del usuario, solicitudes de conexión y conexiones. Estos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento, las habilidades asociadas a cada categoría, el registro de usuarios, el inicio de sesión, la consulta o actualización del perfil del usuario autenticado, las habilidades que cada persona ofrece o desea aprender, la búsqueda de personas y el envío, aceptación, rechazo o cancelación de solicitudes de conexión entre usuarios.
 
 ## Tecnologías utilizadas
 
@@ -53,10 +53,25 @@ SkillMatch/
 │   │   │   │   └── habilidades.validation.js
 │   │   │   ├── habilidades-usuario/
 │   │   │   │   ├── habilidades-usuario.controller.js
+│   │   │   │   ├── habilidades-usuario.mapper.js
 │   │   │   │   ├── habilidades-usuario.repository.js
 │   │   │   │   ├── habilidades-usuario.routes.js
 │   │   │   │   ├── habilidades-usuario.service.js
 │   │   │   │   └── habilidades-usuario.validation.js
+│   │   │   ├── solicitudes/
+│   │   │   │   ├── solicitudes.controller.js
+│   │   │   │   ├── solicitudes.mapper.js
+│   │   │   │   ├── solicitudes.repository.js
+│   │   │   │   ├── solicitudes.routes.js
+│   │   │   │   ├── solicitudes.service.js
+│   │   │   │   └── solicitudes.validation.js
+│   │   │   ├── conexiones/
+│   │   │   │   ├── conexiones.controller.js
+│   │   │   │   ├── conexiones.mapper.js
+│   │   │   │   ├── conexiones.repository.js
+│   │   │   │   ├── conexiones.routes.js
+│   │   │   │   ├── conexiones.service.js
+│   │   │   │   └── conexiones.validation.js
 │   │   │   └── usuarios/
 │   │   │       ├── usuarios.controller.js
 │   │   │       ├── usuarios.repository.js
@@ -64,7 +79,8 @@ SkillMatch/
 │   │   │       ├── usuarios.service.js
 │   │   │       └── usuarios.validation.js
 │   │   ├── utils/
-│   │   │   └── campos.js
+│   │   │   ├── campos.js
+│   │   │   └── consulta.js
 │   │   └── server.js
 │   ├── tests/
 │   │   ├── config/
@@ -76,8 +92,12 @@ SkillMatch/
 │   │   │   ├── errorHandler.test.js
 │   │   │   └── notFound.test.js
 │   │   ├── modules/
+│   │   │   ├── conexiones.validation.test.js
 │   │   │   ├── habilidades-usuario.validation.test.js
+│   │   │   ├── solicitudes.validation.test.js
 │   │   │   └── validaciones.test.js
+│   │   ├── utils/
+│   │   │   └── consulta.test.js
 │   │   ├── app.test.js
 │   │   └── entorno-pruebas.js
 │   ├── .env.example
@@ -622,7 +642,89 @@ Content-Type: application/json
 
 En la actualización todos los campos son opcionales, pero se debe enviar al menos uno. Los textos opcionales (`descripcionApoyo`, `objetivoAprendizaje`) y el `nivelDeseado` aceptan `null` o una cadena vacía para limpiarse; el `nivel` de una habilidad ofrecida solo admite los tres valores permitidos.
 
-### Variables de entorno de autenticación
+### Solicitudes de conexión y conexiones
+
+Cuando una persona encuentra a otra con habilidades complementarias puede enviarle una solicitud de conexión. El flujo de estados es:
+
+- **Pendiente**: el emisor envía la solicitud con un mensaje inicial opcional (máximo 500 caracteres).
+- **Aceptada**: solo el receptor puede aceptarla. Al aceptarla se crea automáticamente la conexión entre ambos usuarios, dentro de una transacción.
+- **Rechazada**: solo el receptor puede rechazarla.
+- **Cancelada**: solo el emisor puede cancelar una solicitud pendiente.
+
+Reglas de negocio:
+
+- No se puede enviar una solicitud a uno mismo (`400`).
+- El receptor debe existir (`404`) y estar activo (`409`).
+- No puede haber dos solicitudes pendientes entre las mismas dos personas, sin importar quién las envió (`409`).
+- Tampoco se puede enviar una solicitud cuando ya existe una conexión activa entre ambos (`409`).
+- Una solicitud solo se responde una vez: si ya fue aceptada, rechazada o cancelada, una nueva respuesta devuelve `409`.
+- Responder una solicitud ajena devuelve `403`; consultar una solicitud o una conexión en la que no se participa devuelve `404`.
+- Cualquiera de los dos participantes puede finalizar una conexión activa (`409` si ya no está activa).
+
+### Endpoints de solicitudes de conexión y conexiones
+
+| Método  | Ruta                                   | Protegido | Descripción                                              |
+| ------- | -------------------------------------- | --------- | -------------------------------------------------------- |
+| `POST`  | `/api/solicitudes`                     | Sí        | Envía una solicitud de conexión                          |
+| `GET`   | `/api/solicitudes/recibidas`           | Sí        | Lista las solicitudes recibidas con filtros y paginación |
+| `GET`   | `/api/solicitudes/enviadas`            | Sí        | Lista las solicitudes enviadas con filtros y paginación  |
+| `GET`   | `/api/solicitudes/:id`                 | Sí        | Consulta una solicitud del usuario                       |
+| `PATCH` | `/api/solicitudes/:id/aceptar`         | Sí        | Acepta la solicitud y crea la conexión                   |
+| `PATCH` | `/api/solicitudes/:id/rechazar`        | Sí        | Rechaza la solicitud                                     |
+| `PATCH` | `/api/solicitudes/:id/cancelar`        | Sí        | Cancela una solicitud pendiente enviada por el usuario   |
+| `GET`   | `/api/conexiones`                      | Sí        | Lista las conexiones del usuario con paginación          |
+| `GET`   | `/api/conexiones/:id`                  | Sí        | Consulta una conexión del usuario                        |
+| `PATCH` | `/api/conexiones/:id/finalizar`        | Sí        | Finaliza una conexión activa                             |
+
+Los listados aceptan `estado` (para solicitudes: `pendiente`, `aceptada`, `rechazada` o `cancelada`; para conexiones: `activa`, `finalizada` o `bloqueada`), además de `page` y `limit`, y responden con el mismo objeto `paginacion` de los demás listados. Las respuestas incluyen los datos públicos de los dos participantes; en las conexiones se agrega `interlocutor` con la otra persona vista desde el usuario autenticado.
+
+### Ejemplo de envío y aceptación de una solicitud
+
+**Petición:**
+
+```http
+POST /api/solicitudes
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "idUsuarioReceptor": 8,
+  "mensajeInicial": "Hola, vi que ofreces JavaScript y yo puedo ayudarte con diseño."
+}
+```
+
+**Respuesta `201 Created`:**
+
+```json
+{
+  "success": true,
+  "message": "Solicitud enviada correctamente.",
+  "data": {
+    "idSolicitud": 15,
+    "emisor": {
+      "idUsuario": 4,
+      "nombres": "Ana",
+      "apellidos": "Gómez",
+      "alias": "anag"
+    },
+    "receptor": {
+      "idUsuario": 8,
+      "nombres": "Luis",
+      "apellidos": "Pérez",
+      "alias": "luisp"
+    },
+    "mensajeInicial": "Hola, vi que ofreces JavaScript y yo puedo ayudarte con diseño.",
+    "estado": "pendiente",
+    "fechaEnvio": "2026-11-12T15:00:00.000Z",
+    "fechaRespuesta": null
+  }
+}
+```
+
+Cuando el receptor acepta con `PATCH /api/solicitudes/15/aceptar`, la respuesta incluye la solicitud actualizada y la conexión creada en `data.conexion` con el estado `activa`.
+
 
 Además de las variables de conexión a la base de datos, el backend utiliza las siguientes variables:
 
@@ -686,11 +788,11 @@ Qué cubre la suite:
 - Validación de la configuración del entorno (`tests/config/env.test.js`): variables obligatorias, puertos, `JWT_SECRET` y `JWT_EXPIRES_IN`, mensajes de error agregados y advertencias.
 - Autenticación (`tests/middlewares/autenticacion.test.js`): formato del encabezado `Authorization`, tokens válidos, expirados, firmados con otro secreto o sin firma, y autorización de administrador.
 - Manejo de errores (`tests/middlewares/errorHandler.test.js`) y rutas inexistentes (`tests/middlewares/notFound.test.js`).
-- Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores.
+- Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores. Las solicitudes de conexión (`tests/modules/solicitudes.validation.test.js`) y las conexiones (`tests/modules/conexiones.validation.test.js`) cubren el receptor, el mensaje inicial, los filtros de estado y los identificadores.
 - Utilidades de listados (`tests/utils/consulta.test.js`): valores por defecto de `page` y `limit`, metadatos de paginación y validación de filtros de texto, identificadores y valores cerrados (`estado`, `orden`).
-- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`) y el 401 de las ocho rutas de habilidades del usuario.
+- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`), el 401 de las ocho rutas de habilidades del usuario y el 401 de las diez rutas de solicitudes y conexiones.
 
-La suite completa suma 121 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
+La suite completa suma 143 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
 
 El archivo `tests/entorno-pruebas.js` define variables de entorno mínimas para que las pruebas puedan cargar la configuración sin depender de un `.env` específico.
 
@@ -758,6 +860,26 @@ Desde Postman se pueden realizar las siguientes pruebas. Todas las rutas exigen 
 9. Eliminar un registro y volver a intentarlo (debe responder `404`).
 10. Usar el identificador de un registro de otro usuario y comprobar que responda `404`.
 11. Verificar que las ocho rutas respondan `401` cuando no se envía el token.
+
+## Pruebas del módulo de solicitudes y conexiones
+
+Desde Postman se pueden realizar las siguientes pruebas con dos usuarios registrados (cada uno con su token):
+
+1. Enviar una solicitud con `POST /api/solicitudes` indicando `idUsuarioReceptor` y un `mensajeInicial`.
+2. Intentar enviarse una solicitud a uno mismo y comprobar que responda `400`.
+3. Repetir el envío al mismo usuario (debe responder `409`).
+4. Consultar las solicitudes pendientes con `GET /api/solicitudes/recibidas?estado=pendiente`.
+5. Filtrar las enviadas con `GET /api/solicitudes/enviadas` y comprobar el objeto `paginacion`.
+6. Aceptar la solicitud con el token del receptor y comprobar que devuelva la solicitud `aceptada` y la conexión `activa`.
+7. Intentar aceptarla de nuevo (debe responder `409`).
+8. Intentar rechazar una solicitud con el token del emisor (debe responder `403`).
+9. Crear otra solicitud y rechazarla con el token del receptor.
+10. Crear una tercera solicitud y cancelarla con el token del emisor.
+11. Consultar `GET /api/conexiones?estado=activa`, comprobar `interlocutor` y finalizarla con `PATCH /api/conexiones/:id/finalizar`.
+12. Volver a finalizar la misma conexión (debe responder `409`).
+13. Consultar una solicitud o conexión de otras personas y comprobar que responda `404`.
+14. Enviar `page=0`, `limit=100`, `estado=otro` o un `id` no numérico y comprobar que la API responda `400`.
+15. Verificar que las diez rutas respondan `401` cuando no se envía el token.
 
 ## Requisitos previos
 

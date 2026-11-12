@@ -7,6 +7,8 @@ Rutas protegidas: requieren el encabezado "Authorization: Bearer <token>".
 Las escrituras del catálogo (categorías y habilidades) requieren rol administrador.
 Las habilidades del usuario (sección 5) requieren un usuario autenticado y operan
 solo sobre sus propios registros.
+Las solicitudes de conexión y las conexiones (secciones 6 y 7) también requieren
+un usuario autenticado y solo permiten actuar sobre los registros propios.
 
 =========================================================
 1. CATEGORÍAS
@@ -322,4 +324,119 @@ Descripción: Elimina una habilidad requerida.
 Protegido: Sí
 Encabezado:
 Authorization: Bearer <token>
+Respuesta exitosa: 200 OK
+
+=========================================================
+6. SOLICITUDES DE CONEXIÓN
+=========================================================
+Todas las rutas son privadas: el usuario se identifica con el token y solo puede
+consultar o responder las solicitudes en las que participa.
+Valores permitidos:
+  estado -> pendiente, aceptada, rechazada, cancelada
+  page   -> entero entre 1 y 100000 (por defecto 1)
+  limit  -> entero entre 1 y 50 (por defecto 10)
+
+POST /api/solicitudes
+Descripción: Envía una solicitud de conexión a otro usuario.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Cuerpo:
+{
+  "idUsuarioReceptor": 8,
+  "mensajeInicial": "Hola, vi que ofreces JavaScript y yo puedo ayudarte con diseño."
+}
+Nota: "mensajeInicial" es opcional (máximo 500 caracteres). No se puede enviar
+una solicitud a uno mismo (400). El receptor debe existir (404) y estar activo
+(409). No puede haber otra solicitud pendiente entre ambos, sin importar quién
+la envió (409), ni una conexión activa entre los dos (409).
+Respuesta exitosa: 201 Created
+
+GET /api/solicitudes/recibidas
+Descripción: Lista las solicitudes que otras personas enviaron al usuario.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Parámetros opcionales: estado, page, limit
+Ejemplo: GET /api/solicitudes/recibidas?estado=pendiente&page=1&limit=10
+Respuesta exitosa: 200 OK (data + paginacion)
+
+GET /api/solicitudes/enviadas
+Descripción: Lista las solicitudes que el usuario autenticado envió.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Parámetros opcionales: estado, page, limit
+Respuesta exitosa: 200 OK (data + paginacion)
+
+GET /api/solicitudes/:id
+Descripción: Consulta una solicitud del usuario (emisor o receptor).
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Nota: si la solicitud no existe o el usuario no participa responde 404.
+Respuesta exitosa: 200 OK
+
+PATCH /api/solicitudes/:id/aceptar
+Descripción: Acepta la solicitud y crea la conexión entre ambos usuarios.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Nota: solo puede aceptarla el receptor (403 en caso contrario). La solicitud
+debe estar pendiente (409). La respuesta incluye data.solicitud con estado
+"aceptada" y data.conexion con estado "activa".
+Respuesta exitosa: 200 OK
+
+PATCH /api/solicitudes/:id/rechazar
+Descripción: Rechaza la solicitud pendiente.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Nota: solo puede rechazarla el receptor (403). Debe estar pendiente (409).
+Respuesta exitosa: 200 OK
+
+PATCH /api/solicitudes/:id/cancelar
+Descripción: Cancela una solicitud pendiente enviada por el usuario.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Nota: solo puede cancelarla el emisor (403). Debe estar pendiente (409).
+Respuesta exitosa: 200 OK
+
+=========================================================
+7. CONEXIONES
+=========================================================
+Todas las rutas son privadas: solo los dos participantes de una conexión pueden
+consultarla o finalizarla.
+Valores permitidos:
+  estado -> activa, finalizada, bloqueada
+  page   -> entero entre 1 y 100000 (por defecto 1)
+  limit  -> entero entre 1 y 50 (por defecto 10)
+
+GET /api/conexiones
+Descripción: Lista las conexiones en las que participa el usuario autenticado.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Parámetros opcionales: estado, page, limit
+Ejemplo: GET /api/conexiones?estado=activa&page=1&limit=10
+Nota: cada conexión incluye los datos públicos de emisor y receptor, y el campo
+"interlocutor" con la otra persona vista desde el usuario autenticado.
+Respuesta exitosa: 200 OK (data + paginacion)
+
+GET /api/conexiones/:id
+Descripción: Consulta una conexión en la que participa el usuario.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Nota: si la conexión no existe o el usuario no participa responde 404.
+Respuesta exitosa: 200 OK
+
+PATCH /api/conexiones/:id/finalizar
+Descripción: Finaliza una conexión activa.
+Protegido: Sí
+Encabezado:
+Authorization: Bearer <token>
+Nota: puede hacerlo cualquiera de los dos participantes (404 si no participa).
+Si la conexión ya no está activa responde 409.
 Respuesta exitosa: 200 OK

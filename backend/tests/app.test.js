@@ -415,3 +415,130 @@ test('GET /api/usuarios valida los filtros y la paginación', async () => {
     );
 });
 
+test('las rutas de solicitudes y conexiones están protegidas', async () => {
+    const rutas = [
+        ['POST', '/api/solicitudes'],
+        ['GET', '/api/solicitudes/recibidas'],
+        ['GET', '/api/solicitudes/enviadas'],
+        ['GET', '/api/solicitudes/1'],
+        ['PATCH', '/api/solicitudes/1/aceptar'],
+        ['PATCH', '/api/solicitudes/1/rechazar'],
+        ['PATCH', '/api/solicitudes/1/cancelar'],
+        ['GET', '/api/conexiones'],
+        ['GET', '/api/conexiones/1'],
+        ['PATCH', '/api/conexiones/1/finalizar']
+    ];
+
+    for (const [metodo, ruta] of rutas) {
+        const opciones = {
+            method: metodo,
+            headers: { 'content-type': 'application/json' }
+        };
+
+        // GET no admite cuerpo, los demás métodos sí.
+        if (metodo !== 'GET') {
+            opciones.body = JSON.stringify({});
+        }
+
+        const { estado, cuerpo } = await pedir(ruta, opciones);
+
+        assert.equal(estado, 401, `${metodo} ${ruta} debe responder 401`);
+        assert.equal(
+            cuerpo.message,
+            'No se proporcionó un token de autenticación.'
+        );
+    }
+});
+
+test('POST /api/solicitudes valida el receptor y el mensaje', async () => {
+    const sinReceptor = await pedirConToken(
+        '/api/solicitudes',
+        'POST',
+        TOKEN_USUARIO,
+        {}
+    );
+
+    assert.equal(sinReceptor.estado, 400);
+    assert.ok(
+        sinReceptor.cuerpo.errors.some((error) =>
+            /idUsuarioReceptor/.test(error)
+        )
+    );
+
+    // El token de pruebas identifica al usuario 99.
+    const aSiMismo = await pedirConToken(
+        '/api/solicitudes',
+        'POST',
+        TOKEN_USUARIO,
+        { idUsuarioReceptor: 99 }
+    );
+
+    assert.equal(aSiMismo.estado, 400);
+    assert.deepEqual(aSiMismo.cuerpo.errors, [
+        'No puedes enviarte una solicitud a ti mismo.'
+    ]);
+
+    const invalida = await pedirConToken(
+        '/api/solicitudes',
+        'POST',
+        TOKEN_USUARIO,
+        {
+            idUsuarioReceptor: 5,
+            mensajeInicial: 'x'.repeat(501),
+            estado: 'pendiente'
+        }
+    );
+
+    assert.equal(invalida.estado, 400);
+    assert.equal(invalida.cuerpo.errors.length, 2);
+});
+
+test('GET /api/solicitudes/recibidas valida el filtro de estado', async () => {
+    const { estado, cuerpo } = await pedir(
+        '/api/solicitudes/recibidas?estado=olvidada',
+        { headers: { authorization: `Bearer ${TOKEN_USUARIO}` } }
+    );
+
+    assert.equal(estado, 400);
+    assert.ok(cuerpo.errors.some((error) => /estado/.test(error)));
+});
+
+test('PATCH /api/solicitudes/abc/aceptar responde 400 con token', async () => {
+    const { estado, cuerpo } = await pedirConToken(
+        '/api/solicitudes/abc/aceptar',
+        'PATCH',
+        TOKEN_USUARIO,
+        {}
+    );
+
+    assert.equal(estado, 400);
+    assert.equal(
+        cuerpo.message,
+        'El identificador debe ser un entero positivo válido.'
+    );
+});
+
+test('GET /api/conexiones valida los filtros y la paginación', async () => {
+    const { estado, cuerpo } = await pedir(
+        '/api/conexiones?estado=otro&limit=100',
+        { headers: { authorization: `Bearer ${TOKEN_USUARIO}` } }
+    );
+
+    assert.equal(estado, 400);
+    assert.equal(cuerpo.errors.length, 2);
+    assert.ok(cuerpo.errors.some((error) => /estado/.test(error)));
+    assert.ok(cuerpo.errors.some((error) => /limit/.test(error)));
+});
+
+test('GET /api/conexiones/abc responde 400 con token', async () => {
+    const { estado, cuerpo } = await pedir('/api/conexiones/abc', {
+        headers: { authorization: `Bearer ${TOKEN_USUARIO}` }
+    });
+
+    assert.equal(estado, 400);
+    assert.equal(
+        cuerpo.message,
+        'El identificador debe ser un entero positivo válido.'
+    );
+});
+

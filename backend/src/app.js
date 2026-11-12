@@ -6,6 +6,8 @@ import habilidadesRoutes from './modules/habilidades/habilidades.routes.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import usuariosRoutes from './modules/usuarios/usuarios.routes.js';
 import habilidadesUsuarioRoutes from './modules/habilidades-usuario/habilidades-usuario.routes.js';
+import solicitudesRoutes from './modules/solicitudes/solicitudes.routes.js';
+import conexionesRoutes from './modules/conexiones/conexiones.routes.js';
 
 const app = express();
 
@@ -27,6 +29,8 @@ app.use('/api/habilidades', habilidadesRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/habilidades-usuario', habilidadesUsuarioRoutes);
+app.use('/api/solicitudes', solicitudesRoutes);
+app.use('/api/conexiones', conexionesRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
