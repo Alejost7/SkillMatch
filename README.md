@@ -2,7 +2,34 @@
 
 SkillMatch es una plataforma web orientada al intercambio no monetario de conocimientos y habilidades. Permite que las personas publiquen habilidades que pueden enseñar, registren habilidades que desean aprender, busquen coincidencias, envíen solicitudes de conexión, se comuniquen y califiquen las experiencias de intercambio.
 
-Actualmente, el proyecto implementa en el backend los módulos de gestión de categorías, gestión de habilidades, autenticación, usuarios, habilidades del usuario, solicitudes de conexión, conexiones, mensajería y calificaciones. Estos módulos exponen APIs REST conectadas a una base de datos MariaDB y permiten administrar el catálogo de áreas de conocimiento, las habilidades asociadas a cada categoría, el registro de usuarios, el inicio de sesión, la consulta o actualización del perfil del usuario autenticado, las habilidades que cada persona ofrece o desea aprender, la búsqueda de personas, el envío, aceptación, rechazo o cancelación de solicitudes de conexión entre usuarios, la conversación privada entre los participantes de una conexión aceptada y la calificación mutua al finalizar el intercambio.
+El proyecto está implementado de extremo a extremo. El backend expone una **API REST** con los módulos de categorías, habilidades, autenticación, usuarios, habilidades del usuario, solicitudes de conexión, conexiones, mensajería, calificaciones y notificaciones en tiempo real (SSE); la base de datos MariaDB/MySQL contiene el esquema, los datos iniciales y las migraciones; y el frontend de React + Vite cubre las pantallas públicas, el panel privado de cada usuario y el panel administrativo, con chat, notificaciones en vivo y la página de política de tratamiento de datos. El backend sirve además el frontend compilado, de modo que **toda la aplicación se despliega como un único servicio** con el `Dockerfile` y el `railway.json` incluidos en el repositorio.
+
+## Estado actual del proyecto
+
+| Área | Estado | Ubicación |
+| ---- | ------ | --------- |
+| API REST (10 módulos, incluido SSE) | Completo | `backend/src/modules/` |
+| Autenticación con JWT y roles | Completo | `backend/src/modules/auth/`, `backend/src/config/roles.js` |
+| Esquema, datos iniciales y migraciones | Completo | `database/` |
+| Frontend público (inicio, login, registro, política de datos, 404) | Completo | `frontend/src/pages/` |
+| Panel privado (perfil, habilidades, búsqueda, solicitudes, conexiones, mensajes, calificaciones) | Completo | `frontend/src/modules/`, `frontend/src/layouts/PrivateLayout.jsx` |
+| Panel administrativo (categorías y habilidades) | Completo | `frontend/src/modules/`, `frontend/src/layouts/AdminLayout.jsx` |
+| Notificaciones en tiempo real (SSE) | Completo | `backend/src/modules/eventos/`, `frontend/src/features/notificaciones/` |
+| Navegación móvil con menú de hamburguesa | Completo | `frontend/src/components/MenuMovil.jsx` |
+| Pruebas automatizadas del backend | Completo (213 casos, sin base de datos) | `backend/tests/` |
+| Despliegue en un solo servicio | Completo | `Dockerfile`, `railway.json`, `Documentation/DESPLIEGUE_RAILWAY.md` |
+
+Qué incluye cada parte:
+
+- **Backend.** Rutas `/api/...` con validación en el servidor, controladores, servicios y repositorios con consultas preparadas, manejo centralizado de errores y respuestas 404 uniformes en JSON. `backend/src/app.js` sirve el SPA compilado (`frontend/dist`) con *fallback* de React Router, y `backend/src/server.js` escucha en `HOST`/`PORT` y se apaga de forma ordenada con `SIGTERM`/`SIGINT`.
+- **Frontend.** Organizado por dominios (`modules/`), con contextos de autenticación y de eventos, un cliente HTTP único (`services/apiClient.js`), validaciones por módulo, estados de carga y vacío, diálogos de confirmación y avisos flotantes.
+- **Tiempo real.** `GET /api/eventos` mantiene un flujo SSE por usuario y `GET /api/eventos/feed` resume las notificaciones; el cliente lo consume con `EventSource` y muestra indicador de conexión, panel de notificaciones y *toasts*.
+
+Limitaciones conocidas (asumidas y documentadas):
+
+- El registro de conexiones SSE vive en memoria del proceso: el despliegue usa **una sola réplica**; con varias instancias haría falta un bus compartido (por ejemplo Redis pub/sub).
+- El flujo SSE se autentica con `?token=<jwt>` porque `EventSource` no envía encabezados; conviene servir HTTPS y no registrar la *query string* en los logs.
+- Las pruebas automatizadas cubren el backend; el frontend se valida con `npm run lint` y `npm run build`, además de las pruebas manuales descritas más abajo.
 
 ## Tecnologías utilizadas
 
@@ -12,10 +39,12 @@ Actualmente, el proyecto implementa en el backend los módulos de gestión de ca
 - Node.js
 - Express
 - JSON Web Token (JWT)
-- bcrypt
+- bcryptjs
 - MariaDB / MySQL
+- React Router
 - Tailwind CSS v4
 - Inter, como tipografía principal
+- Docker y Railway, para el despliegue en un único servicio
 
 ## Estructura del repositorio
 
@@ -72,15 +101,38 @@ SkillMatch/
 │   │   │   │   ├── conexiones.routes.js
 │   │   │   │   ├── conexiones.service.js
 │   │   │   │   └── conexiones.validation.js
-│   │   │   └── usuarios/
-│   │   │       ├── usuarios.controller.js
-│   │   │       ├── usuarios.repository.js
-│   │   │       ├── usuarios.routes.js
-│   │   │       ├── usuarios.service.js
-│   │   │       └── usuarios.validation.js
+│   │   │   ├── usuarios/
+│   │   │   │   ├── usuarios.controller.js
+│   │   │   │   ├── usuarios.repository.js
+│   │   │   │   ├── usuarios.routes.js
+│   │   │   │   ├── usuarios.service.js
+│   │   │   │   └── usuarios.validation.js
+│   │   │   ├── calificaciones/
+│   │   │   │   ├── calificaciones.controller.js
+│   │   │   │   ├── calificaciones.mapper.js
+│   │   │   │   ├── calificaciones.repository.js
+│   │   │   │   ├── calificaciones.routes.js
+│   │   │   │   ├── calificaciones.service.js
+│   │   │   │   └── calificaciones.validation.js
+│   │   │   ├── eventos/
+│   │   │   │   ├── eventos.controller.js
+│   │   │   │   ├── eventos.mapper.js
+│   │   │   │   ├── eventos.registro.js
+│   │   │   │   ├── eventos.repository.js
+│   │   │   │   ├── eventos.routes.js
+│   │   │   │   └── eventos.service.js
+│   │   │   └── mensajes/
+│   │   │       ├── mensajes.controller.js
+│   │   │       ├── mensajes.mapper.js
+│   │   │       ├── mensajes.repository.js
+│   │   │       ├── mensajes.routes.js
+│   │   │       ├── mensajes.service.js
+│   │   │       └── mensajes.validation.js
 │   │   ├── utils/
 │   │   │   ├── campos.js
 │   │   │   └── consulta.js
+│   │   ├── apagado.js
+│   │   ├── app.js
 │   │   └── server.js
 │   ├── tests/
 │   │   ├── config/
@@ -92,75 +144,149 @@ SkillMatch/
 │   │   │   ├── errorHandler.test.js
 │   │   │   └── notFound.test.js
 │   │   ├── modules/
+│   │   │   ├── calificaciones.validation.test.js
 │   │   │   ├── conexiones.validation.test.js
+│   │   │   ├── eventos.registro.test.js
 │   │   │   ├── habilidades-usuario.validation.test.js
+│   │   │   ├── mensajes.validation.test.js
 │   │   │   ├── solicitudes.validation.test.js
 │   │   │   └── validaciones.test.js
 │   │   ├── utils/
 │   │   │   └── consulta.test.js
+│   │   ├── apagado.test.js
 │   │   ├── app.test.js
 │   │   └── entorno-pruebas.js
 │   ├── .env.example
+│   ├── package-lock.json
 │   └── package.json
 ├── database/
 │   ├── migrations/
-│   │   └── 001_uq_habilidad_nombre_categoria.sql
+│   │   ├── 001_uq_habilidad_nombre_categoria.sql
+│   │   └── 002_idx_mensaje_conexion_mensaje.sql
 │   ├── seed.sql
 │   └── shema.sql
-└── frontend/
-    ├── src/
-    │   ├── components/
-    │   ├── layouts/
-    │   │   ├── AdminLayout.jsx
-    │   │   └── PublicLayout.jsx
-    │   ├── modules/
-    │   │   └── categorias/
-    │   │       ├── components/
-    │   │       ├── CategoriasPage.jsx
-    │   │       ├── categorias.api.js
-    │   │       └── categorias.validation.js
-    │   ├── pages/
-    │   │   ├── auth/
-    │   │   │   ├── LoginPage.jsx
-    │   │   │   └── RegisterPage.jsx
-    │   │   └── public/
-    │   │       └── HomePage.jsx
-    │   ├── services/
-    │   ├── styles/
-    │   │   └── global.css
-    │   ├── App.jsx
-    │   └── main.jsx
-    ├── index.html
-    ├── vite.config.js
-    └── package.json
+├── Documentation/
+│   └── DESPLIEGUE_RAILWAY.md
+├── frontend/
+│   ├── src/
+│   │   ├── assets/
+│   │   ├── components/
+│   │   │   ├── AlertMessage.jsx
+│   │   │   ├── CampoArea.jsx
+│   │   │   ├── CampoSelect.jsx
+│   │   │   ├── CampoTexto.jsx
+│   │   │   ├── Cargando.jsx
+│   │   │   ├── ConfirmDialog.jsx
+│   │   │   ├── EstadoVacio.jsx
+│   │   │   ├── MenuMovil.jsx
+│   │   │   └── Paginacion.jsx
+│   │   ├── features/
+│   │   │   ├── auth/
+│   │   │   └── notificaciones/
+│   │   ├── layouts/
+│   │   │   ├── AdminLayout.jsx
+│   │   │   ├── PrivateLayout.jsx
+│   │   │   └── PublicLayout.jsx
+│   │   ├── modules/
+│   │   │   ├── calificaciones/
+│   │   │   ├── categorias/
+│   │   │   ├── conexiones/
+│   │   │   ├── habilidades/
+│   │   │   ├── habilidadesUsuario/
+│   │   │   ├── mensajes/
+│   │   │   ├── solicitudes/
+│   │   │   └── usuarios/
+│   │   ├── pages/
+│   │   │   ├── auth/       (LoginPage.jsx, RegisterPage.jsx)
+│   │   │   ├── privado/    (InicioPage.jsx)
+│   │   │   └── public/     (HomePage.jsx, PoliticaDatosPage.jsx, NoEncontradaPage.jsx)
+│   │   ├── services/
+│   │   │   ├── apiClient.js
+│   │   │   ├── consulta.js
+│   │   │   ├── eventosCliente.js
+│   │   │   └── sesion.js
+│   │   ├── styles/
+│   │   │   └── global.css
+│   │   ├── utils/
+│   │   │   ├── errores.js
+│   │   │   └── formato.js
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── package-lock.json
+│   └── package.json
+├── .dockerignore
+├── Dockerfile
+├── railway.json
+└── README.md
 ```
+
+Cada carpeta de `frontend/src/modules/` agrupa un dominio completo: la página (`*Page.jsx`), su cliente de API (`*.api.js`), sus validaciones (`*.validation.js`) y una subcarpeta `components/` con los formularios, listados y tarjetas que solo usa ese dominio.
 
 ### Organización del frontend
 
 El frontend está organizado por responsabilidades:
 
-- `components/`: componentes reutilizables entre diferentes páginas o módulos.
-- `layouts/`: estructuras visuales compartidas. `PublicLayout` se utiliza en las
-  páginas públicas y `AdminLayout` en las páginas administrativas.
-- - `modules/`: funcionalidades agrupadas por dominio. Actualmente contiene el
-  módulo de categorías y sus componentes, validaciones y peticiones a la API.
-  Los módulos de habilidades, autenticación y usuarios actualmente están
-  implementados en el backend.
-- `pages/`: páginas asociadas a rutas de la aplicación. Las páginas públicas se
-  encuentran en `pages/public/` y las páginas de autenticación en `pages/auth/`.
-- `services/`: servicios compartidos, como el cliente para comunicarse con el backend.
+- `components/`: componentes reutilizables entre páginas y módulos (campos de
+  formulario, alertas, diálogo de confirmación, paginación, estado vacío,
+  indicador de carga y el menú móvil `MenuMovil`).
+- `features/`: funcionalidades transversales con su contexto y sus componentes.
+  `auth/` reúne `AuthContext`, `ProtectedRoute`, los formularios de acceso y sus
+  hooks; `notificaciones/` reúne el contexto de eventos SSE, el panel, los
+  *toasts* y el indicador de conexión.
+- `layouts/`: estructuras visuales compartidas. `PublicLayout` se usa en las
+  páginas públicas, `PrivateLayout` en el panel del usuario autenticado y
+  `AdminLayout` en el panel administrativo. Los dos paneles muestran la barra
+  horizontal en escritorio y el menú de hamburguesa en móvil.
+- `modules/`: funcionalidades agrupadas por dominio. Cada módulo contiene su
+  página, su cliente de API, sus validaciones y sus componentes: `categorias`,
+  `habilidades`, `habilidadesUsuario`, `usuarios`, `solicitudes`, `conexiones`,
+  `mensajes` y `calificaciones`.
+- `pages/`: páginas asociadas a rutas. Las públicas están en `pages/public/`, las
+  de autenticación en `pages/auth/` y la de inicio del panel privado en
+  `pages/privado/`.
+- `services/`: servicios compartidos: `apiClient.js` (cliente HTTP con el token),
+  `sesion.js` (almacenamiento de la sesión), `eventosCliente.js` (SSE) y
+  `consulta.js` (parámetros de listados).
+- `utils/`: utilidades de formato y de traducción de errores.
 - `styles/`: estilos globales de la aplicación.
 - `App.jsx`: configuración de las rutas del frontend mediante React Router.
 - `main.jsx`: punto de entrada de la aplicación React.
 
-Las rutas principales del frontend son:
+Las rutas del frontend son:
 
-| Ruta | Página | Layout |
-| ---- | ------ | ------ |
-| `/` | Landing o página de inicio | `PublicLayout` |
+| Ruta | Página | Layout / acceso |
+| ---- | ------ | --------------- |
+| `/` | Inicio | `PublicLayout` |
 | `/login` | Inicio de sesión | `PublicLayout` |
 | `/registro` | Registro de usuario | `PublicLayout` |
-| `/admin/categorias` | Gestión de categorías | `AdminLayout` |
+| `/politica-datos` | Política de tratamiento de datos | `PublicLayout` |
+| `/app` | Inicio del panel privado | `PrivateLayout`, requiere sesión |
+| `/app/perfil` | Perfil del usuario | `PrivateLayout`, requiere sesión |
+| `/app/habilidades` | Habilidades ofrecidas y requeridas | `PrivateLayout`, requiere sesión |
+| `/app/buscar` | Búsqueda de usuarios | `PrivateLayout`, requiere sesión |
+| `/app/usuarios/:id` | Detalle de otro usuario | `PrivateLayout`, requiere sesión |
+| `/app/solicitudes` | Solicitudes de conexión | `PrivateLayout`, requiere sesión |
+| `/app/conexiones` | Conexiones e intercambios | `PrivateLayout`, requiere sesión |
+| `/app/mensajes` | Bandeja de conversaciones | `PrivateLayout`, requiere sesión |
+| `/app/mensajes/:idConexion` | Chat de una conexión | `PrivateLayout`, requiere sesión |
+| `/app/calificaciones` | Calificaciones de los intercambios | `PrivateLayout`, requiere sesión |
+| `/admin` | Redirige a `/admin/categorias` | `AdminLayout`, rol administrador |
+| `/admin/categorias` | Gestión de categorías | `AdminLayout`, rol administrador |
+| `/admin/habilidades` | Gestión de habilidades | `AdminLayout`, rol administrador |
+| `*` | Página no encontrada | Sin layout |
+
+`ProtectedRoute` redirige a `/login` cuando no hay sesión y a `/app` cuando el
+usuario autenticado no tiene el rol exigido. El frontend usa rutas relativas
+(`/api/...`), así que funciona igual en desarrollo con el proxy de Vite y en
+producción con el backend sirviendo el SPA.
+
+La página `/politica-datos` explica qué datos trata la aplicación y está
+enlazada desde el pie de página público. El esquema ya incluye las tablas
+`politica_datos` y `aceptacion_politica`; el registro automático de la
+aceptación todavía no está conectado a un endpoint, así que hoy la página es
+informativa.
 
 ## Módulos implementados
 
@@ -957,12 +1083,22 @@ Detalles de la implementación y limitaciones asumidas:
 Además de las variables de conexión a la base de datos, el backend utiliza las siguientes variables:
 
 ```env
+PORT=3000
+HOST=0.0.0.0
+DB_SSL=false
 JWT_SECRET=cambia_esta_clave_en_produccion
 JWT_EXPIRES_IN=1h
 ```
 
-- `JWT_SECRET`: clave secreta utilizada para firmar y verificar los tokens. Es **obligatoria** y debe tener al menos 16 caracteres. El backend no arranca si falta o es demasiado corta, y muestra un mensaje indicando exactamente qué variable corregir.
-- `JWT_EXPIRES_IN`: tiempo de expiración del token. Acepta el formato de `jsonwebtoken` (`30m`, `1h`, `7d`). Si se omite, se usa `1h`.
+| Variable | Obligatoria | Valor por defecto | Descripción |
+| -------- | ----------- | ----------------- | ----------- |
+| `PORT` | No | `3000` | Puerto en el que escucha el servidor. Railway lo inyecta automáticamente. |
+| `HOST` | No | `0.0.0.0` | Interfaz de escucha. `0.0.0.0` permite el acceso desde fuera del contenedor; `127.0.0.1` restringe el acceso a la máquina local. |
+| `DB_SSL` | No | Sin TLS | TLS de la conexión a MySQL. Vacío o `false` lo desactiva; `true`/`required` lo activa sin validar el certificado (lo que necesita un MySQL gestionado con certificado autofirmado); `verify`/`strict` lo activa validando el certificado. Un valor desconocido impide el arranque. |
+| `JWT_SECRET` | Sí | — | Clave secreta para firmar y verificar los tokens. Mínimo 16 caracteres; si falta o es demasiado corta, el backend no arranca y muestra exactamente qué variable corregir. |
+| `JWT_EXPIRES_IN` | No | `1h` | Tiempo de expiración del token en el formato de `jsonwebtoken` (`30m`, `1h`, `7d`). |
+
+Con `NODE_ENV=production` y la conexión sin TLS el arranque muestra una advertencia, porque la mayoría de los MySQL gestionados exigen SSL. Si la conexión falla por TLS, `testDatabaseConnection()` lo indica y sugiere revisar `DB_SSL`. La validación completa vive en `backend/src/config/env.js` y se ejecuta al arrancar.
 
 Si `JWT_SECRET` conserva el valor de ejemplo de `.env.example`, el arranque muestra una advertencia en la consola.
 
@@ -1013,15 +1149,16 @@ npm run test:watch  # vuelve a ejecutar al guardar cambios
 
 Qué cubre la suite:
 
-- Validación de la configuración del entorno (`tests/config/env.test.js`): variables obligatorias, puertos, `JWT_SECRET` y `JWT_EXPIRES_IN`, mensajes de error agregados y advertencias.
+- Validación de la configuración del entorno (`tests/config/env.test.js`): variables obligatorias, puertos, `JWT_SECRET` y `JWT_EXPIRES_IN`, mensajes de error agregados, `HOST` (valor por defecto `0.0.0.0` y valor personalizado), las variantes de `DB_SSL` (desactivado, `true`, `verify` y valor inválido) y la advertencia de producción sin TLS.
 - Autenticación (`tests/middlewares/autenticacion.test.js`): formato del encabezado `Authorization`, tokens válidos, expirados, firmados con otro secreto o sin firma, autorización de administrador y el token por query de SSE (`autenticarEvento`: ausente, vacío, repetido, inválido y válido con espacios).
 - Manejo de errores (`tests/middlewares/errorHandler.test.js`) y rutas inexistentes (`tests/middlewares/notFound.test.js`).
 - Validaciones de entrada de los módulos (`tests/modules/validaciones.test.js`), incluidos los campos extendidos del perfil (`biografia`, `fotoPerfilUrl`, `disponibilidad`, `ciudad`, `pais`). Las habilidades del usuario tienen su propio archivo (`tests/modules/habilidades-usuario.validation.test.js`): niveles, estados, textos libres, actualizaciones parciales e identificadores. Las solicitudes de conexión (`tests/modules/solicitudes.validation.test.js`), las conexiones (`tests/modules/conexiones.validation.test.js`), la mensajería (`tests/modules/mensajes.validation.test.js`) y las calificaciones (`tests/modules/calificaciones.validation.test.js`) cubren el receptor, el mensaje inicial, el contenido de los mensajes, la puntuación, el comentario, los filtros de estado y los identificadores.
 - Utilidades de listados (`tests/utils/consulta.test.js`): valores por defecto de `page` y `limit`, metadatos de paginación y validación de filtros de texto, identificadores y valores cerrados (`estado`, `orden`).
-- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`, `conexionId`, `desde`), el 401 de las ocho rutas de habilidades del usuario, el 401 de las diez rutas de solicitudes y conexiones, el 401 de las cuatro rutas de mensajería, el 401 de las dos rutas de eventos y el 401 de las tres rutas de calificaciones. También se abre un flujo SSE real: se comprueban los encabezados, el evento `conectado`, el límite de conexiones (`429`) y que la suscripción se libera al cerrar el cliente.
+- Integración HTTP básica (`tests/app.test.js`): se levanta la aplicación en un puerto libre y se comprueban respuestas reales de rutas que no consultan la base de datos, incluido el 401/403 de las escrituras del catálogo, el 400 de las validaciones, el 400 de los filtros de los listados (`page`, `limit`, `estado`, `orden`, `habilidadOfrecida`, `conexionId`, `desde`), el 401 de las ocho rutas de habilidades del usuario, el 401 de las diez rutas de solicitudes y conexiones, el 401 de las cuatro rutas de mensajería, el 401 de las dos rutas de eventos y el 401 de las tres rutas de calificaciones. También se abre un flujo SSE real: se comprueban los encabezados, el evento `conectado`, el límite de conexiones (`429`) y que la suscripción se libera al cerrar el cliente. Además se verifica el *fallback* del SPA cuando existe `frontend/dist`: una ruta de React Router con `Accept: text/html` devuelve `index.html` con `Cache-Control: no-cache`, mientras que sin ese encabezado (o bajo `/api/...`) la respuesta sigue siendo el 404 en JSON.
+- Apagado ordenado (`tests/apagado.test.js`): orden de cierre (eventos SSE → servidor HTTP → conexiones inactivas → pool de MySQL), funcionamiento cuando el servidor no llegó a arrancar, idempotencia ante una segunda señal, tolerancia a fallos del pool, salida forzada cuando algo se cuelga y código de salida distinto de cero en ese caso.
 - Eventos en tiempo real (`tests/modules/eventos.registro.test.js`): entrega de eventos al destinatario, formato de las tramas, latido con temporizadores simulados (a los 30 segundos y detenido al cerrar), límite de conexiones por usuario y descarte de conexiones muertas.
 
-La suite completa suma 196 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
+La suite completa suma 213 casos y no necesita MySQL en ejecución. Si una prueba falla, `npm test` termina con código de salida distinto de cero.
 
 El archivo `tests/entorno-pruebas.js` define variables de entorno mínimas para que las pruebas puedan cargar la configuración sin depender de un `.env` específico.
 
@@ -1164,14 +1301,18 @@ Ejemplo de variables de entorno:
 
 ```env
 PORT=3000
+HOST=0.0.0.0
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=tu_contraseña
 DB_NAME=skillmatch
+DB_SSL=false
 JWT_SECRET=una_clave_larga_y_dificil_de_adivinar
 JWT_EXPIRES_IN=1h
 ```
+
+`DB_SSL` se deja vacío o en `false` con un MySQL local y se pone en `true` cuando el servidor exige TLS (por ejemplo, el MySQL de Railway). El resto de modos se describen en [Variables de entorno del backend](#variables-de-entorno-del-backend).
 
 El backend valida estas variables al arrancar: si falta alguna o tiene un formato inválido, no inicia y muestra el listado de errores encontrados.
 
@@ -1213,6 +1354,60 @@ El frontend quedará disponible en:
 ```text
 http://localhost:5173
 ```
+
+## Despliegue en producción (un solo servicio)
+
+En producción el frontend no se sirve con `vite preview`: el backend sirve la API y el SPA compilado desde el mismo origen. Así no hay CORS ni `VITE_API_URL`, y el flujo SSE viaja por el mismo dominio.
+
+Archivos que intervienen:
+
+| Archivo | Para qué sirve |
+| ------- | -------------- |
+| `Dockerfile` | Imagen de producción en tres etapas: compila el frontend, instala las dependencias del backend sin `devDependencies` y arma la imagen final (`node:22-alpine`, usuario `node`). |
+| `railway.json` | Configura Railway: constructor `DOCKERFILE`, arranque `node backend/src/server.js`, *healthcheck* en `/api/health` (120 s) y reinicio `ON_FAILURE`. |
+| `.dockerignore` | Deja fuera del contexto `node_modules`, `dist`, `.git`, `.env*` y la documentación. |
+| `Documentation/DESPLIEGUE_RAILWAY.md` | Guía paso a paso: crear el proyecto, añadir MySQL, definir variables, aplicar migraciones y resolver problemas. |
+
+Qué hace `backend/src/app.js` cuando existe `frontend/dist`:
+
+1. Sirve `index.html` y el resto de archivos con `express.static` (`index: false`).
+2. Envía `Cache-Control: public, max-age=31536000, immutable` solo a `/assets/*`, porque Vite añade un hash al nombre de cada archivo.
+3. Devuelve `index.html` con `Cache-Control: no-cache` para cualquier `GET`/`HEAD` que pida HTML y no empiece por `/api`: así funcionan las rutas de React Router (`/app/mensajes/7`, `/politica-datos`, ...) al recargar o al entrar por enlace directo.
+4. Deja que `/api/...` y el resto de peticiones sigan su curso normal, de modo que una ruta inexistente sigue respondiendo el 404 en JSON.
+
+Si `frontend/dist` no existe (por ejemplo, al trabajar con dos servidores en desarrollo), el backend arranca como API pura y avisa por consola.
+
+Variables de entorno en el servicio:
+
+```env
+DB_HOST=${{MySQL.MYSQLHOST}}
+DB_PORT=${{MySQL.MYSQLPORT}}
+DB_NAME=${{MySQL.MYSQLDATABASE}}
+DB_USER=${{MySQL.MYSQLUSER}}
+DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
+DB_SSL=true
+JWT_SECRET=<clave-de-32-bytes-en-hexadecimal>
+JWT_EXPIRES_IN=1h
+```
+
+No se define `PORT`: la plataforma lo inyecta. `NODE_ENV` ya vale `production` dentro de la imagen y `HOST` conserva su valor por defecto `0.0.0.0`.
+
+Arranque y apagado ordenado:
+
+- Al recibir `SIGTERM` (lo envía la plataforma al desplegar o al dormir el servicio) o `SIGINT`, el backend deja de aceptar peticiones, cierra los flujos SSE, cierra el servidor HTTP, espera a que el pool de MySQL termine y sale con código 0. Si algo tarda más de 10 segundos, fuerza la salida.
+- `GET /api/health` es el *healthcheck*: responde sin consultar la base de datos, así que la plataforma puede reanudar el servicio tras una pausa sin esperar a MySQL.
+- El registro de conexiones SSE está en memoria, así que en el plan gratuito de Railway (una réplica) es suficiente; no se debe escalar horizontalmente sin un bus compartido.
+
+Migraciones y datos iniciales en la base gestionada:
+
+```bash
+cd backend
+npm run db:migrate -- --aplicar
+```
+
+El comando usa las mismas variables `DB_*` del archivo `.env` local apuntando (con `DB_SSL=true`) a la base del proveedor. Para cargar roles y el catálogo inicial se ejecuta `database/seed.sql` con el cliente de MySQL.
+
+La guía completa, incluida la alternativa sin Docker (Nixpacks), está en `Documentation/DESPLIEGUE_RAILWAY.md`.
 
 ---
 
@@ -1463,6 +1658,8 @@ Puntos de quiebre utilizados:
 | `lg`       | 1024 px       |
 | `xl`       | 1280 px       |
 
+En `md` y superiores, `PrivateLayout` y `AdminLayout` muestran la barra horizontal de enlaces. Por debajo de `md` esa barra se oculta y aparece `MenuMovil`: un botón de hamburguesa que abre un panel con los mismos enlaces y que se cierra al elegir uno, al tocar fuera o con `Escape` (devolviendo el foco al botón).
+
 ## Accesibilidad
 
 La interfaz debe cumplir las siguientes reglas:
@@ -1472,6 +1669,7 @@ La interfaz debe cumplir las siguientes reglas:
 - Etiquetas asociadas a cada campo de formulario.
 - Texto alternativo en imágenes mediante el atributo `alt`.
 - Navegación por teclado en formularios, botones y modales.
+- Menú móvil operable con teclado: `aria-expanded`, `aria-controls`, texto para lectores de pantalla y cierre con `Escape` devolviendo el foco al botón.
 - Indicadores de carga durante operaciones con espera.
 - Validación en el cliente para mejorar la experiencia y validación en el servidor como fuente de verdad.
 
